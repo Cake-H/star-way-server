@@ -1,0 +1,96 @@
+# 智能投递助手 — 默认配置（可按环境拆 application-dev.yml 等）
+server:
+  port: 8088
+
+spring:
+  application:
+    name: ida-server
+  profiles:
+    active: dev
+  # 与 database/mysql/ida_v1_init.sql 中库名一致；本地无 MySQL 时启动会失败，可先起库或改 profile
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:ida_db}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:}
+  # Redis：登录态、验证码、热点缓存等（与模板中常见用法一致；无密码可留空）
+  data:
+    redis:
+      host: ${IDA_REDIS_HOST:127.0.0.1}
+      port: ${IDA_REDIS_PORT:6379}
+      password: ${IDA_REDIS_PASSWORD:}
+      database: ${IDA_REDIS_DB:0}
+      timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
+
+# 与 SmartAdmin 模板中 http.pool 含义一致，供 HttpClientConfig 注入 RestClient
+http:
+  pool:
+    max-total: 20
+    connect-timeout: 5000
+    read-timeout: 30000
+    write-timeout: 30000
+    keep-alive: 300000
+
+# 浏览器扩展 / 本地客户端跨域；生产请改为白名单
+ida:
+  cors:
+    allowed-origin-patterns:
+      - "*"
+    # 若浏览器脚本需读取自定义响应头，在此列出；请求头中的用户 id 由 allowedHeaders:* 已允许携带
+    exposed-headers: []
+  http:
+    identity:
+      # 插件/网关注入用户主键；登录成功后优先使用 Authorization Bearer
+      user-id-header: X-User-Id
+      request-id-header: X-Request-Id
+      authorization-header: Authorization
+  # 阿里云号码认证-短信认证（SendSmsVerifyCode；赠送签名/模板见控制台，非旧版 dysmsapi SendSms）
+  aliyun:
+    sms:
+      enabled: false
+      access-key-id: ${ALIBABA_ACCESS_KEY_ID:}
+      access-key-secret: ${ALIBABA_ACCESS_KEY_SECRET:}
+      sign-name: ${ALIBABA_SMS_SIGN_NAME:}
+      template-code: ${ALIBABA_SMS_TEMPLATE_CODE:}
+      scheme-name: ${ALIBABA_DYPNS_SCHEME_NAME:}
+      endpoint: dypnsapi.aliyuncs.com
+  sms:
+    code:
+      length: 6
+      ttl-seconds: 300
+      resend-interval-seconds: 60
+  auth:
+    session:
+      token-ttl-seconds: 604800
+      bearer-prefix: "Bearer "
+  # 火山方舟 / 豆包：切勿把密钥写进仓库。本地运行 com.smartapply.ida.ark.demo 时设置环境变量 ARK_API_KEY
+  volcengine-ark:
+    env-api-key: ARK_API_KEY
+  # 加密相关默认值在对应 *Properties 类中；此处仅开关与占位，密钥请用环境变量注入
+  crypto:
+    bcrypt:
+      strength: 10
+    aes-field:
+      enabled: false
+      secret: ${IDA_AES_FIELD_SECRET:}
+      salt-hex: ${IDA_AES_FIELD_SALT_HEX:}
+
+# MyBatis-Plus：https://baomidou.com
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
