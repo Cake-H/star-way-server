@@ -2,6 +2,7 @@ package com.smartapply.ida.module.app.auth.service;
 
 import com.smartapply.ida.common.exception.BusinessException;
 import com.smartapply.ida.config.props.sms.SmsVerificationProperties;
+import com.smartapply.ida.integration.sms.SmsTemplateParamJsonBuilder;
 import com.smartapply.ida.integration.sms.SmsTemplateSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +17,7 @@ import java.time.Duration;
  * <ul>
  *   <li>频控：同一手机号在 {@link SmsVerificationProperties#getResendIntervalSeconds()} 内仅允许发送一次；使用 Redis {@code setIfAbsent} 实现。</li>
  *   <li>存储：验证码明文仅存 Redis，键为 {@code prefix + 手机号}，TTL 见 {@link SmsVerificationProperties#getTtlSeconds()}。</li>
- *   <li>发送：模板 JSON 固定为 {@code {"code":"六位数字"}}，阿里云控制台模板变量名须为 {@code code}。</li>
+ *   <li>发送：模板 JSON 须含 {@code code} 与 {@code min}（有效分钟），与号码认证赠送模板变量一致，见 {@link com.smartapply.ida.integration.sms.SmsTemplateParamJsonBuilder}。</li>
  *   <li>失败回滚：短信通道异常时删除本次写入的频控键与验证码键，避免用户被锁死又收不到短信。</li>
  * </ul>
  */
@@ -48,7 +49,7 @@ public class SmsVerificationService {
         // 先发码再调通道：失败时要删掉 rate + code，否则用户既收不到短信又进不了冷却重试
         stringRedisTemplate.opsForValue()
                 .set(codeKey, code, Duration.ofSeconds(verificationProperties.getTtlSeconds()));
-        String json = "{\"code\":\"" + code + "\"}";
+        String json = SmsTemplateParamJsonBuilder.buildCodeAndValidMinutesJson(code, verificationProperties.getTtlSeconds());
         try {
             smsTemplateSender.sendVerificationCode(normalized, json);
         } catch (Exception e) {

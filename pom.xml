@@ -20,6 +20,7 @@
 
     <modules>
         <module>ida-common</module>
+        <module>ida-ai</module>
         <module>ida-server</module>
     </modules>
 
@@ -42,6 +43,11 @@
             <dependency>
                 <groupId>com.smartapply</groupId>
                 <artifactId>ida-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.smartapply</groupId>
+                <artifactId>ida-ai</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

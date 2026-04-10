@@ -7,12 +7,20 @@ spring:
     name: ida-server
   profiles:
     active: dev
+
+  # 简历上传：限制体积，避免超大文件占满内存与 OSS
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 16MB
+
   # 与 database/mysql/ida_v1_init.sql 中库名一致；本地无 MySQL 时启动会失败，可先起库或改 profile
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:ida_db}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:}
+
   # Redis：登录态、验证码、热点缓存等（与模板中常见用法一致；无密码可留空）
   data:
     redis:
@@ -44,12 +52,14 @@ ida:
       - "*"
     # 若浏览器脚本需读取自定义响应头，在此列出；请求头中的用户 id 由 allowedHeaders:* 已允许携带
     exposed-headers: []
+
   http:
     identity:
       # 插件/网关注入用户主键；登录成功后优先使用 Authorization Bearer
       user-id-header: X-User-Id
       request-id-header: X-Request-Id
       authorization-header: Authorization
+
   # 阿里云号码认证-短信认证（SendSmsVerifyCode；赠送签名/模板见控制台，非旧版 dysmsapi SendSms）
   aliyun:
     sms:
@@ -60,6 +70,17 @@ ida:
       template-code: ${ALIBABA_SMS_TEMPLATE_CODE:}
       scheme-name: ${ALIBABA_DYPNS_SCHEME_NAME:}
       endpoint: dypnsapi.aliyuncs.com
+
+    # 简历原件对象存储（与短信可共用同一对 AK，但建议 RAM 子账号按 Bucket 授权最小权限）
+    # enabled=true 时：若下方 endpoint/AK/SK/bucket 任一项为空，则不会创建 OSS Bean（应用可正常启动；上传简历时会提示未启用 OSS）
+    oss:
+      enabled: true
+      endpoint: ${ALIYUN_OSS_ENDPOINT:}
+      access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
+      access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+      bucket: ${ALIYUN_OSS_BUCKET:}
+      key-prefix: app/resume/
+      public-base-url: ${ALIYUN_OSS_PUBLIC_BASE_URL:}
   sms:
     code:
       length: 6
@@ -69,9 +90,24 @@ ida:
     session:
       token-ttl-seconds: 604800
       bearer-prefix: "Bearer "
+
   # 火山方舟 / 豆包：切勿把密钥写进仓库。本地运行 com.smartapply.ida.ark.demo 时设置环境变量 ARK_API_KEY
   volcengine-ark:
     env-api-key: ARK_API_KEY
+    # 与官方示例一致；若使用其它地域网关请改此处
+    base-url: https://ark.cn-beijing.volces.com/api/v3
+    resume-parse:
+      # 控制台「在线推理」创建的 Endpoint 模型 ID
+      model: doubao-seed-2-0-lite-260215
+      # 送入模型的纯文本最大长度，超长会截断并记入 parseNotes
+      max-plain-text-chars: 80000
+      temperature: 0.2
+      # 深度思考：thinking-type=disabled 时勿配 reasoning-effort（方舟会 400）；需推理档位时改为 enabled 并设 reasoning-effort
+      thinking-type: disabled
+      # reasoning-effort: low
+      # 等待方舟返回完整响应（含生成长 JSON）；过短会 SocketTimeoutException: Read timed out（仅 arkRestClient）
+      read-timeout-ms: 300000
+
   # 加密相关默认值在对应 *Properties 类中；此处仅开关与占位，密钥请用环境变量注入
   crypto:
     bcrypt:
