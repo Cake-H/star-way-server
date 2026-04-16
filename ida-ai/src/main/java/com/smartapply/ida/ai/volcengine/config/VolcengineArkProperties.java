@@ -25,6 +25,11 @@ public class VolcengineArkProperties {
     /** 简历纯文本 → 结构化 JSON，走 {@code /chat/completions} */
     private ResumeParse resumeParse = new ResumeParse();
 
+    /**
+     * 浏览器插件「一键填表」：根据简历 JSON 与页面控件快照生成填值计划（与 {@link ResumeParse} 提示词/模型可分开调优）。
+     */
+    private PluginAutofill pluginAutofill = new PluginAutofill();
+
     @Data
     public static class ResumeParse {
         private String model = "doubao-seed-2-0-lite-260215";
@@ -48,6 +53,39 @@ public class VolcengineArkProperties {
          * 需在开启思考（如 {@code enabled}）时再配置 {@code minimal}/{@code low} 等。
          */
         private String reasoningEffort = "";
+    }
+
+    @Data
+    public static class PluginAutofill {
+        /**
+         * 专用模型 ID；留空则沿用 {@link ResumeParse#getModel()}。
+         */
+        private String model = "";
+        private double temperature = 0.15;
+
+        /**
+         * 对应请求体 {@code thinking.type}。与简历解析独立配置；填表默认开启低强度思考以提升对齐质量。
+         * 留空则不下发 {@code thinking} 字段。
+         */
+        private String thinkingType = "enabled";
+
+        /**
+         * 对应请求体 {@code reasoning_effort}，如 {@code low}、{@code minimal}；
+         * 仅在 {@code thinkingType} 非 {@code disabled} 且非空时下发。
+         */
+        private String reasoningEffort = "low";
+
+        /**
+         * 对应请求体 {@code max_tokens}。填表 JSON 控件多且开启思考时，默认上限易截断导致非法 JSON，故单独设较大默认值；
+         * 设为 0 或负数表示不下发该字段（沿用接口默认）。
+         */
+        private int maxTokens = 16384;
+
+        /**
+         * 为 true 时在请求体中下发 {@code response_format: {type: json_object}}（OpenAI 兼容），约束模型只输出合法 JSON 对象；
+         * 若当前接入点/模型报错不支持，可改为 false 仅依赖提示词。
+         */
+        private boolean responseFormatJsonObject = true;
     }
 
     /** 从环境中解析 API Key；未配置时返回 null */

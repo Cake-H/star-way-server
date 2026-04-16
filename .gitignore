@@ -1,7 +1,9 @@
 # Maven / 本地工具生成
 target/
-ida-server/cp.txt
-ida-server/deps-tree.txt
+ida-app-server/cp.txt
+ida-app-server/deps-tree.txt
+ida-plugin-server/cp.txt
+ida-plugin-server/deps-tree.txt
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup

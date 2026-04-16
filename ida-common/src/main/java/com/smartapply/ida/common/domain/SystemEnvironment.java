@@ -5,7 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * 当前进程运行环境快照，由 ida-server 在启动时根据配置装配，供 {@link com.smartapply.ida.handler.GlobalExceptionHandler} 使用。
+ * 当前进程运行环境快照，由 Spring Boot 启动类所在进程根据配置装配，供 {@link com.smartapply.ida.handler.GlobalExceptionHandler} 使用。
  */
 @Getter
 @AllArgsConstructor

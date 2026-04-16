@@ -16,12 +16,15 @@
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>ida-parent</name>
-    <description>智能投递助手 — 后端父工程</description>
+    <description>智能投递助手 — 后端父工程（可执行：ida-app-server / ida-plugin-server 双进程）</description>
 
     <modules>
         <module>ida-common</module>
         <module>ida-ai</module>
-        <module>ida-server</module>
+        <module>ida-app</module>
+        <module>ida-plugin</module>
+        <module>ida-app-server</module>
+        <module>ida-plugin-server</module>
     </modules>
 
     <properties>
@@ -48,6 +51,26 @@
             <dependency>
                 <groupId>com.smartapply</groupId>
                 <artifactId>ida-ai</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.smartapply</groupId>
+                <artifactId>ida-app</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.smartapply</groupId>
+                <artifactId>ida-plugin</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.smartapply</groupId>
+                <artifactId>ida-app-server</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.smartapply</groupId>
+                <artifactId>ida-plugin-server</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

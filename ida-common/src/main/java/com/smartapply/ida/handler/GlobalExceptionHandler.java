@@ -13,9 +13,11 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -86,6 +88,15 @@ public class GlobalExceptionHandler {
             log.info("业务异常, url={} msg={}", currentRequestUri(), e.getMessage());
         }
         return ResponseDTO.error(UserErrorCode.OPERATION_FAILED, e.getMessage());
+    }
+
+    /**
+     * 客户端在服务端写完响应前关闭连接：扩展/浏览器超时、用户取消、代理或本机软件中断等。
+     * 常见于 AI 填表等长耗时接口；连接已不可用，无需再写 JSON 体，仅打 debug 避免误报「系统错误」。
+     */
+    @ExceptionHandler({AsyncRequestNotUsableException.class, ClientAbortException.class})
+    public void clientAbortedRequest(Exception e) {
+        log.debug("客户端已中止连接(超时或主动取消), url={}", currentRequestUri());
     }
 
     /** 兜底：非预期异常记 error 日志；生产环境不返回异常细节防信息泄露 */
