@@ -44,7 +44,7 @@ public class PluginAutofillTaskRegistry {
     public void register(String taskId, long userId) {
         long now = System.currentTimeMillis();
         TaskRecord rec = new TaskRecord(taskId, userId, now);
-        tasks.put(taskId, rec);
+        tasks.put(taskId, rec); // 覆盖同 taskId 理论上不应发生（UUID）
         log.info("[autofill-task] 已注册 taskId={} userId={} status=PENDING", taskId, userId);
     }
 
@@ -54,7 +54,7 @@ public class PluginAutofillTaskRegistry {
     public void markRunning(String taskId) {
         TaskRecord rec = tasks.get(taskId);
         if (rec == null) {
-            return;
+            return; // 已被 evict 或异常路径：静默跳过，避免 NPE
         }
         rec.markRunning();
         log.info("[autofill-task] 开始执行 taskId={} status=RUNNING", taskId);
@@ -74,7 +74,7 @@ public class PluginAutofillTaskRegistry {
     public void touchProgress(String taskId, PluginAutofillProgressPhase phase, String detail, int percent) {
         TaskRecord rec = tasks.get(taskId);
         if (rec == null) {
-            return;
+            return; // 任务已过期被删：进度丢弃即可
         }
         rec.touch(phase, detail, percent);
         log.info("[autofill-task taskId={}] phase={} percent={}% — {}", taskId, phase.name(), percent, detail);
@@ -85,7 +85,7 @@ public class PluginAutofillTaskRegistry {
         if (rec == null) {
             return;
         }
-        rec.markSucceeded(result);
+        rec.markSucceeded(result); // 写入终态 + result，轮询可拿到填表计划
         log.info("[autofill-task taskId={}] 成功结束 fillable={} assignments={}", taskId,
                 result != null && result.isFillable(),
                 result != null && result.getAssignments() != null ? result.getAssignments().size() : 0);
@@ -96,7 +96,7 @@ public class PluginAutofillTaskRegistry {
         if (rec == null) {
             return;
         }
-        rec.markFailed(errorMessage);
+        rec.markFailed(errorMessage); // 写入终态 + errorMessage，result 清空
         log.warn("[autofill-task taskId={}] 失败: {}", taskId, errorMessage);
     }
 
@@ -104,10 +104,10 @@ public class PluginAutofillTaskRegistry {
      * 校验 userId 后返回只读快照；若任务不存在、已过期或越权则 empty。
      */
     public Optional<PluginAutofillTaskStatusVO> snapshotFor(long userId, String taskId) {
-        evictExpired();
+        evictExpired(); // 读前顺带清理，减轻 Map 体积
         TaskRecord rec = tasks.get(taskId);
         if (rec == null || rec.userId != userId) {
-            return Optional.empty();
+            return Optional.empty(); // 越权或不存在：与「过期」对客户端表现一致
         }
         return Optional.of(rec.toStatusVo());
     }
@@ -118,6 +118,7 @@ public class PluginAutofillTaskRegistry {
     public void evictExpired() {
         long now = System.currentTimeMillis();
         long deadline = now - TASK_TTL.toMillis();
+        // updatedAt 在 touch/mark* 时刷新；长期无轮询的任务整行删除
         tasks.entrySet().removeIf(e -> e.getValue().updatedAt < deadline);
     }
 

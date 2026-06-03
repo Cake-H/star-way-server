@@ -30,8 +30,14 @@ import java.util.UUID;
 @Service
 public class PluginAutofillTaskService {
 
+    /** 内存任务表 + 进度 sink 工厂；单例 Bean，全进程共享一张 Map */
     private final PluginAutofillTaskRegistry taskRegistry;
+    /** 与同步填表共用同一套 AI 流水线，仅多传一个 {@link PluginAutofillProgressSink} */
     private final PluginFormAutofillAiService pluginFormAutofillAiService;
+    /**
+     * 专用线程池（Bean 名见 {@link PluginAutofillExecutorConfig#BEAN_NAME}）：
+     * 用 {@link Qualifier} 注入，避免和 Spring Boot 可能存在的其他 {@link ThreadPoolTaskExecutor} 混淆。
+     */
     private final ThreadPoolTaskExecutor pluginAutofillExecutor;
 
     /**
@@ -50,8 +56,11 @@ public class PluginAutofillTaskService {
      * 提交异步任务：只做注册 + 投递线程池，<b>不做</b>参数校验（与同步接口一致，由 Service 层在 worker 内抛业务异常）。
      */
     public PluginAutofillTaskSubmitResultVO submitTask(long userId, PluginAutofillPlanRequest req) {
+        // 先删过期任务，避免 Map 无限增长（与 GET 轮询入口共用同一策略）
         taskRegistry.evictExpired();
+        // 全局唯一 id，前端轮询 URL 路径参数
         String taskId = UUID.randomUUID().toString();
+        // 写入 PENDING，此时 GET 已能查到（可能尚未 RUNNING）
         taskRegistry.register(taskId, userId);
 
         // Lambda 内只能引用 effectively final 变量，故拷贝一份再传入异步 Runnable
@@ -64,6 +73,7 @@ public class PluginAutofillTaskService {
          */
         pluginAutofillExecutor.execute(() -> runTask(uid, tid, body));
 
+        // 立即返回：不含填表结果，仅 taskId + 轮询路径提示（与 ApiRouteConstants 前缀一致由前端拼接 BASE）
         return PluginAutofillTaskSubmitResultVO.builder()
                 .taskId(taskId)
                 .pollPathTemplate("/api/v1/plugin/resume/autofill-plan/tasks/{taskId}")
@@ -83,9 +93,11 @@ public class PluginAutofillTaskService {
             PluginAutofillPlanResultVO result = pluginFormAutofillAiService.planAutofill(userId, req, sink);
             taskRegistry.markSucceeded(taskId, result);
         } catch (BusinessException e) {
+            // 业务可预期错误：文案直接展示给用户
             taskRegistry.markFailed(taskId, e.getMessage());
         } catch (Throwable t) {
             log.error("[autofill-task taskId={}] 未捕获异常", taskId, t);
+            // 兜底：避免任务永远停在 RUNNING
             taskRegistry.markFailed(taskId,
                     t.getMessage() != null && !t.getMessage().isBlank() ? t.getMessage() : "系统异常，请稍后重试");
         }
@@ -95,6 +107,7 @@ public class PluginAutofillTaskService {
      * 供 GET 轮询：校验任务归属，防止通过猜测 taskId 读取他人结果。
      */
     public PluginAutofillTaskStatusVO getTaskStatus(long userId, String taskId) {
+        // empty：taskId 不存在、超时被 evict、或 userId 与创建时不一致
         return taskRegistry.snapshotFor(userId, taskId)
                 .orElseThrow(() -> new BusinessException("任务不存在、已过期或无权访问"));
     }

@@ -31,7 +31,10 @@ public class VolcengineArkAutoConfiguration {
             VolcengineArkProperties volcengineArkProperties,
             @Value("${http.pool.max-total:20}") int maxTotal,
             @Value("${http.pool.connect-timeout:5000}") int connectTimeoutMs) {
-        int readMs = volcengineArkProperties.getResumeParse().getReadTimeoutMs();
+        // 简历解析与面试总结共用 arkRestClient，读超时取两者较大值（面试总结默认 120s）
+        int readMs = Math.max(
+                volcengineArkProperties.getResumeParse().getReadTimeoutMs(),
+                volcengineArkProperties.getInterviewSummarize().getReadTimeoutMs());
         PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
         connectionManager.setMaxTotal(maxTotal);
         connectionManager.setDefaultMaxPerRoute(Math.max(2, maxTotal / 4));
@@ -48,7 +51,6 @@ public class VolcengineArkAutoConfiguration {
 
         HttpComponentsClientHttpRequestFactory requestFactory =
                 new HttpComponentsClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(readMs);
         return RestClient.builder().requestFactory(requestFactory).build();
     }
 

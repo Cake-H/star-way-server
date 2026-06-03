@@ -1,5 +1,6 @@
 package com.smartapply.ida.common.domain;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.smartapply.ida.common.code.ErrorCode;
 import com.smartapply.ida.common.code.UserErrorCode;
 import com.smartapply.ida.common.enumeration.DataTypeEnum;
@@ -81,5 +82,22 @@ public class ResponseDTO<T> {
     /** 失败时仍返回结构化 data（如校验结果列表） */
     public static <T> ResponseDTO<T> errorData(ErrorCode errorCode, T data) {
         return new ResponseDTO<>(errorCode, false, null, data);
+    }
+
+    /**
+     * 前端 axios 兼容：序列化额外输出 {@code success}，取值与 {@link #ok} 相同（成功为 true）。
+     * 不参与反序列化绑定，避免与 Lombok 生成的 setter 冲突。
+     */
+    @JsonProperty("success")
+    public Boolean getSuccess() {
+        return ok;
+    }
+
+    /**
+     * 前端 axios 兼容：序列化额外输出 {@code message}，取值与 {@link #msg} 相同。
+     */
+    @JsonProperty("message")
+    public String getMessage() {
+        return msg;
     }
 }

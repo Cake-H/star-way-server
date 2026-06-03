@@ -24,12 +24,12 @@ public class PluginAutofillExecutorConfig {
     @Bean(name = BEAN_NAME)
     public ThreadPoolTaskExecutor pluginAutofillExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setThreadNamePrefix("plugin-autofill-");
+        executor.setThreadNamePrefix("plugin-autofill-"); // jstack / 日志中可过滤
         executor.setCorePoolSize(4);
-        executor.setMaxPoolSize(8);
+        executor.setMaxPoolSize(8); // 突发时扩容到 8，仍受队列容量约束
         // 有界队列：防止瞬时海量提交撑爆内存；满队列时默认拒绝策略会抛异常，需监控与前端限流
         executor.setQueueCapacity(200);
-        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setWaitForTasksToCompleteOnShutdown(true); // 优雅停机：先跑完已提交 Runnable
         executor.setAwaitTerminationSeconds(60);
         return executor;
     }

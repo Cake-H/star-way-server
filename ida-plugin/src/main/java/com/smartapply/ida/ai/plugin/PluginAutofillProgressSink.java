@@ -24,6 +24,7 @@ public interface PluginAutofillProgressSink {
      * 也使 planAutofill 内无需写 if (async) 分支。
      */
     static PluginAutofillProgressSink noop() {
+        // 三参数全忽略：同步 HTTP 请求无任务表，也不打进度日志（避免刷屏）
         return (phase, detail, percent) -> {
         };
     }

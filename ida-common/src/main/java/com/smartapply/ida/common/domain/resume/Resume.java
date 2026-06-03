@@ -9,7 +9,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.smartapply.ida.common.mybatis.IdaTableLogic;
 /**
  * 简历主表(Resume)表实体类
  *
@@ -110,7 +112,8 @@ public class Resume {
     private Integer schemaVersion;
     //乐观锁    
     private Integer rowVersion;
-        
+
+    @TableLogic(value = IdaTableLogic.NOT_DELETED, delval = IdaTableLogic.DELETED)
     private LocalDateTime deletedAt;
         
     private LocalDateTime createdAt;

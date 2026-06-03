@@ -2,7 +2,9 @@ package com.smartapply.ida.module.app.resume.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.smartapply.ida.common.domain.resume.*;
+import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillResumeContextVO;
 import com.smartapply.ida.common.domain.resume.dto.parse.ResumeParseDraftDto;
+import com.smartapply.ida.common.domain.resume.support.ResumeDraftModuleCountsExtractor;
 import com.smartapply.ida.common.domain.resume.vo.ResumeDetailVO;
 import com.smartapply.ida.common.domain.resume.vo.ResumeListItemVO;
 import com.smartapply.ida.common.exception.BusinessException;
@@ -61,7 +63,6 @@ public class AppResumeQueryServiceImpl implements AppResumeQueryService {
     public List<ResumeListItemVO> listMyResumes(long userId) {
         List<Resume> rows = resumeMapper.selectList(Wrappers.<Resume>lambdaQuery()
                 .eq(Resume::getUserId, userId)
-                .isNull(Resume::getDeletedAt)
                 .orderByDesc(Resume::getUpdatedAt));
 
         return rows.stream()
@@ -118,6 +119,26 @@ public class AppResumeQueryServiceImpl implements AppResumeQueryService {
     }
 
     /**
+     * {@inheritDoc}
+     * <p>
+     * 实现：复用 {@link #getResumeDetail(long, long)} 的鉴权与 draft 装配，再用
+     * {@link ResumeDraftModuleCountsExtractor#fromDraft(ResumeParseDraftDto)} 数各 List 长度，
+     * 不额外查库。
+     */
+    @Override
+    public PluginAutofillResumeContextVO getAutofillResumeContext(long userId, long resumeId) {
+        // 与详情接口共用读路径：抛「无权查看」等业务异常的行为一致
+        ResumeDetailVO detail = getResumeDetail(userId, resumeId);
+        // draft 在 getResumeDetail 内已保证非 null 子表列表（可能为空列表）
+        return PluginAutofillResumeContextVO.builder()
+                .resumeId(resumeId)
+                .schemaVersion(detail.getSchemaVersion())
+                .updatedAt(detail.getUpdatedAt())
+                .moduleCounts(ResumeDraftModuleCountsExtractor.fromDraft(detail.getDraft()))
+                .build();
+    }
+
+    /**
      * 校验简历可被当前用户读取：存在、未 soft-delete、归属一致。
      *
      * @param r      主表查询结果，可为 null
@@ -125,7 +146,7 @@ public class AppResumeQueryServiceImpl implements AppResumeQueryService {
      * @throws BusinessException 不可读时抛出（文案与写侧区分，使用「无权查看」）
      */
     private void assertResumeReadableByUser(Resume r, long userId) {
-        if (r == null || r.getDeletedAt() != null) {
+        if (r == null) {
             throw new BusinessException("简历不存在或已删除");
         }
         if (!r.getUserId().equals(userId)) {

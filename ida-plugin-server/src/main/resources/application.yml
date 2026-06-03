@@ -1,6 +1,9 @@
-# ????? API ?? ? ???? 8089??????????????
 server:
   port: ${PLUGIN_SERVER_PORT:8089}
+
+logging:
+  level:
+    com.smartapply.ida.plugin: debug
 
 spring:
   application:
@@ -24,7 +27,6 @@ spring:
       host: ${IDA_REDIS_HOST:127.0.0.1}
       port: ${IDA_REDIS_PORT:6379}
       password: ${IDA_REDIS_PASSWORD:}
-      # ?? App ?? 0???????????? 1 ??????????????????
       database: ${IDA_PLUGIN_REDIS_DB:0}
       timeout: 3s
       lettuce:
@@ -43,6 +45,10 @@ http:
     keep-alive: 300000
 
 ida:
+  server:
+    access-host: ${IDA_ACCESS_HOST:127.0.0.1}
+    api-v1-prefix: /api/v1/plugin
+
   cors:
     allowed-origin-patterns:
       - "*"
@@ -83,15 +89,16 @@ ida:
 
   volcengine-ark:
     env-api-key: ARK_API_KEY
-    base-url: https://ark.cn-beijing.volces.com/api/v3
+    # base-url: https://ark.cn-beijing.volces.com/api/v3
+    base-url: https://api.deepseek.com
     resume-parse:
-      model: doubao-seed-2-0-lite-260215
+      model: deepseek-v4-flash
       max-plain-text-chars: 80000
       temperature: 0.2
       thinking-type: disabled
       read-timeout-ms: 300000
     plugin-autofill:
-      model: doubao-seed-2-0-lite-260215
+      model: deepseek-v4-flash
       thinking-type: disabled
 #      reasoning-effort: minimal
       max-tokens: 16384
@@ -112,9 +119,28 @@ mybatis-plus:
     map-underscore-to-camel-case: true
   global-config:
     banner: false
+    db-config:
+      logic-delete-field: deletedAt
+      logic-not-delete-value: 'null'
+      logic-delete-value: 'now()'
+
+--- #################### 接口文档配置 ####################
 
 springdoc:
   api-docs:
+    enabled: true
     path: /v3/api-docs
+    groups:
+      enabled: true
   swagger-ui:
-    path: /swagger-ui.html
+    enabled: true
+    path: /swagger-ui
+    url: /v3/api-docs/plugin
+  default-flat-param-object: true
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+    enable-default-group: true
+    default-group-name: plugin

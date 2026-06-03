@@ -4,6 +4,7 @@ import com.smartapply.ida.ai.plugin.PluginFormAutofillAiService;
 import com.smartapply.ida.common.domain.ResponseDTO;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanRequest;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanResultVO;
+import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillResumeContextVO;
 import com.smartapply.ida.common.domain.plugin.autofill.task.PluginAutofillTaskSubmitResultVO;
 import com.smartapply.ida.common.domain.plugin.autofill.task.PluginAutofillTaskStatusVO;
 import com.smartapply.ida.common.domain.resume.vo.ResumeDetailVO;
@@ -44,7 +45,7 @@ import java.util.List;
  * </ul>
  * 服务端无法直接操作标签页 DOM，故<b>必须</b>由扩展完成采集与回写。
  * <p>
- * <b>路由顺序：</b>{@code /list}、{@code /autofill-plan}、{@code /autofill-plan/tasks} 必须写在 {@code /{resumeId}} 之前，
+ * <b>路由顺序：</b>{@code /list}、{@code /{resumeId}/autofill-context}、{@code /autofill-plan}、{@code /autofill-plan/tasks} 必须写在 {@code /{resumeId}} 之前，
  * 否则路径变量可能被误匹配。
  */
 @Tag(name = "插件端-简历")
@@ -55,15 +56,40 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PluginResumeController {
 
+    /**
+     * 简历列表与详情：来自 ida-app 模块，供插件只读拉取用户简历数据。
+     */
     private final AppResumeQueryService appResumeQueryService;
+    /**
+     * 一键填表核心：调火山方舟生成 {@link PluginAutofillPlanResultVO}；同步接口直接调 {@link PluginFormAutofillAiService#planAutofill(long, com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanRequest)}。
+     */
     private final PluginFormAutofillAiService pluginFormAutofillAiService;
+    /**
+     * 异步任务：注册 taskId、往线程池投递 Runnable、供 GET 轮询读内存快照；与 {@link #pluginFormAutofillAiService} 配合使用。
+     */
     private final PluginAutofillTaskService pluginAutofillTaskService;
 
     @Operation(summary = "我的简历列表（摘要，与正式客户端列表字段一致）")
     @GetMapping("/list")
     public ResponseDTO<List<ResumeListItemVO>> listMyResumes(@RequestUserId(required = true) Long userId) {
         log.debug("收到插件端获取简历列表请求，plugin resume list userId={}", userId);
+        // ResponseDTO.ok：统一包装 code=0，业务数据放在 data
         return ResponseDTO.ok(appResumeQueryService.listMyResumes(userId));
+    }
+
+    /**
+     * 一键填表前置：返回云端简历各可重复模块的条目数，扩展应在采快照前按该数字点击「+添加」展开块，使 DOM 与简历条数对齐。
+     * <p>
+     * 与 {@link PluginFormAutofillAiService} 注入提示词 PART_C 的统计来源一致（同一 Extractor）。
+     */
+    @Operation(summary = "一键填表前置：云简历各模块条目数（用于展开网申表单块）")
+    @GetMapping("/{resumeId}/autofill-context")
+    public ResponseDTO<PluginAutofillResumeContextVO> getAutofillResumeContext(
+            @RequestUserId(required = true) Long userId,
+            @PathVariable("resumeId") Long resumeId) {
+        log.info("收到各模块条目数获取申请，/autofill-context userId={} resumeId={}", userId, resumeId);
+        // 只读、无方舟调用；与预览详情共享鉴权
+        return ResponseDTO.ok(appResumeQueryService.getAutofillResumeContext(userId, resumeId));
     }
 
     @Operation(summary = "预览简历详情（只读，不含保存/修改语义）")
@@ -89,13 +115,14 @@ public class PluginResumeController {
         log.info("收到插件端一键填表请求，plugin autofill-plan userId={} resumeId={} fieldCount={}",
                 userId, body.getResumeId(),
                 body.getPage() != null && body.getPage().getFields() != null ? body.getPage().getFields().size() : 0);
+        // 同步路径：内部使用 progress=noop，不更新异步任务表
         return ResponseDTO.ok(pluginFormAutofillAiService.planAutofill(userId, body));
     }
 
     /**
-     * 异步一键填表：立即返回 {@link PluginAutofillTaskSubmitResultVO #taskId}，扩展端轮询
+     * 异步一键填表：立即返回 {@link PluginAutofillTaskSubmitResultVO#getTaskId()}，扩展端轮询
      * {@link #getAutofillPlanTask(long, String)} 直至 status 为终态；服务端在专用线程池执行模型调用，避免网关/浏览器同步超时。
-     * <p>
+     * <p>6
      * <b>与同步接口差异：</b>此处 HTTP 很快结束；真正调大模型在 {@link PluginAutofillTaskService}
      * 投递到 {@code pluginAutofillExecutor} 的后台线程中执行（{@code ThreadPoolTaskExecutor#execute} 不等待 Runnable 跑完）。
      */

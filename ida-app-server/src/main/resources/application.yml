@@ -42,6 +42,11 @@ http:
     keep-alive: 300000
 
 ida:
+  server:
+    # 启动完成后控制台输出的访问主机；手机联调可设 IDA_ACCESS_HOST=本机局域网 IP
+    access-host: ${IDA_ACCESS_HOST:127.0.0.1}
+    api-v1-prefix: /api/v1/app
+
   cors:
     allowed-origin-patterns:
       - "*"
@@ -81,10 +86,12 @@ ida:
       bearer-prefix: "Bearer "
 
   volcengine-ark:
-    env-api-key: ARK_API_KEY
-    base-url: https://ark.cn-beijing.volces.com/api/v3
+    env-api-key: ARK_API_KEY_DEEPSEEK
+    # base-url: https://ark.cn-beijing.volces.com/api/v3
+    base-url: https://api.deepseek.com
     resume-parse:
-      model: doubao-seed-2-0-lite-260215
+      # model: doubao-seed-2-0-lite-260215
+      model: deepseek-v4-flash
       max-plain-text-chars: 80000
       temperature: 0.2
       thinking-type: disabled
@@ -96,6 +103,21 @@ ida:
       max-tokens: 16384
       response-format-json-object: true
       temperature: 0.15
+    interview-summarize:
+      model: deepseek-v4-pro
+      temperature: 0.3
+      thinking-type: disabled
+      max-tokens: 8192
+      response-format-json-object: true
+      read-timeout-ms: 120000
+
+  speech-to-text:
+    enabled: false
+    env-api-key: OPENAI_API_KEY
+    base-url: https://api.openai.com/v1
+    model: whisper-1
+    read-timeout-ms: 120000
+    min-transcript-chars: 10
 
   crypto:
     bcrypt:
@@ -111,9 +133,23 @@ mybatis-plus:
     map-underscore-to-camel-case: true
   global-config:
     banner: false
+    db-config:
+      logic-delete-field: deletedAt
+      logic-not-delete-value: 'null'
+      logic-delete-value: 'now()'
+
+--- #################### 接口文档配置 ####################
 
 springdoc:
   api-docs:
+    enabled: true
     path: /v3/api-docs
   swagger-ui:
-    path: /swagger-ui.html
+    enabled: true
+    path: /swagger-ui
+  default-flat-param-object: true
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn

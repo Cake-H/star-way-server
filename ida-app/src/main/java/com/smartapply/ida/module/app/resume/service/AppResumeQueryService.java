@@ -1,5 +1,6 @@
 package com.smartapply.ida.module.app.resume.service;
 
+import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillResumeContextVO;
 import com.smartapply.ida.common.domain.resume.vo.ResumeDetailVO;
 import com.smartapply.ida.common.domain.resume.vo.ResumeListItemVO;
 
@@ -36,4 +37,15 @@ public interface AppResumeQueryService {
      * @return 含主表元数据 + 完整 {@code draft}（与解析/保存 JSON 结构一致）
      */
     ResumeDetailVO getResumeDetail(long userId, long resumeId);
+
+    /**
+     * 插件「一键填表」前置数据：返回当前简历 draft 中各可重复模块的条目数（与云端一致），
+     * 供扩展在采 DOM 快照前自动点击「+添加」展开对应行数，避免仅靠浏览器缓存猜测。
+     * <p>
+     * 权限与 {@link #getResumeDetail(long, long)} 相同：简历须存在、未删且归属 userId。
+     *
+     * @param userId   当前用户
+     * @param resumeId 简历主键
+     */
+    PluginAutofillResumeContextVO getAutofillResumeContext(long userId, long resumeId);
 }

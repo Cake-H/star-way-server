@@ -30,7 +30,10 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
 import java.util.List;
@@ -51,6 +54,17 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class AppResumeDraftServiceImpl implements AppResumeDraftService {
+    private static final List<DateTimeFormatter> LOCAL_DATE_FORMATTERS = List.of(
+            DateTimeFormatter.ISO_LOCAL_DATE,
+            DateTimeFormatter.ofPattern("yyyy-M-d"),
+            DateTimeFormatter.ofPattern("yyyy/M/d"),
+            DateTimeFormatter.ofPattern("yyyy.MM.dd"),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    );
+    private static final List<DateTimeFormatter> YEAR_MONTH_FORMATTERS = List.of(
+            DateTimeFormatter.ofPattern("yyyy-MM"),
+            DateTimeFormatter.ofPattern("yyyy/M")
+    );
 
     private final ResumeMapper resumeMapper;
     private final ResumeEducationMapper resumeEducationMapper;
@@ -86,7 +100,7 @@ public class AppResumeDraftServiceImpl implements AppResumeDraftService {
         if (resumeId != null) {
             // ——— 更新已有简历 ———
             Resume existing = resumeMapper.selectById(resumeId);
-            if (existing == null || existing.getDeletedAt() != null) {
+            if (existing == null) {
                 throw new BusinessException("简历不存在或已删除");
             }
             if (!existing.getUserId().equals(userId)) {
@@ -150,13 +164,13 @@ public class AppResumeDraftServiceImpl implements AppResumeDraftService {
     /**
      * {@inheritDoc}
      * <p>
-     * 校验归属与未删除后，置 {@code deleted_at}、清 {@code is_default}；若原为默认则尝试提升另一份简历为默认。
+     * 校验归属后逻辑删除（{@link com.baomidou.mybatisplus.annotation.TableLogic}），清 {@code is_default}；若原为默认则尝试提升另一份简历为默认。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void softDeleteResume(long userId, long resumeId) {
         Resume r = resumeMapper.selectById(resumeId);
-        if (r == null || r.getDeletedAt() != null) {
+        if (r == null) {
             throw new BusinessException("简历不存在或已删除");
         }
         if (!r.getUserId().equals(userId)) {
@@ -166,14 +180,16 @@ public class AppResumeDraftServiceImpl implements AppResumeDraftService {
         boolean wasDefault = r.getIsDefault() != null && r.getIsDefault() == 1;
         LocalDateTime now = LocalDateTime.now();
 
-        int updated = resumeMapper.update(null, Wrappers.<Resume>lambdaUpdate()
-                .set(Resume::getDeletedAt, now)
-                .set(Resume::getUpdatedAt, now)
+        resumeMapper.update(null, Wrappers.<Resume>lambdaUpdate()
                 .set(Resume::getIsDefault, 0)
+                .set(Resume::getUpdatedAt, now)
                 .eq(Resume::getId, resumeId)
-                .eq(Resume::getUserId, userId)
-                .isNull(Resume::getDeletedAt));
-        if (updated == 0) {
+                .eq(Resume::getUserId, userId));
+
+        int deleted = resumeMapper.delete(Wrappers.<Resume>lambdaQuery()
+                .eq(Resume::getId, resumeId)
+                .eq(Resume::getUserId, userId));
+        if (deleted == 0) {
             throw new BusinessException("删除失败，请重试");
         }
 
@@ -188,7 +204,6 @@ public class AppResumeDraftServiceImpl implements AppResumeDraftService {
     private void promoteLatestResumeToDefault(long userId) {
         Resume next = resumeMapper.selectOne(Wrappers.<Resume>lambdaQuery()
                 .eq(Resume::getUserId, userId)
-                .isNull(Resume::getDeletedAt)
                 .orderByDesc(Resume::getUpdatedAt)
                 .last("LIMIT 1"));
         if (next != null) {
@@ -208,8 +223,7 @@ public class AppResumeDraftServiceImpl implements AppResumeDraftService {
         resumeMapper.update(null, Wrappers.<Resume>lambdaUpdate()
                 .set(Resume::getIsDefault, 0)
                 .eq(Resume::getUserId, userId)
-                .ne(Resume::getId, resumeId)
-                .isNull(Resume::getDeletedAt));
+                .ne(Resume::getId, resumeId));
 
         resumeMapper.update(null, Wrappers.<Resume>lambdaUpdate()
                 .set(Resume::getIsDefault, 1)
@@ -252,7 +266,6 @@ public class AppResumeDraftServiceImpl implements AppResumeDraftService {
         if (isInsert) {
             r.setIsDefault(req.getIsDefault() != null && req.getIsDefault() == 1 ? 1 : 0);
             r.setRowVersion(1);
-            r.setDeletedAt(null);
         } else {
             r.setRowVersion(r.getRowVersion() == null ? 1 : r.getRowVersion() + 1);
             if (req.getIsDefault() != null) {
@@ -578,8 +591,43 @@ public class AppResumeDraftServiceImpl implements AppResumeDraftService {
         if (!StringUtils.hasText(s)) {
             return null;
         }
+        String raw = s.trim();
+        if (raw.isEmpty()) {
+            return null;
+        }
+
+        // 兼容前端直接传 ISO 日期时间（如 2025-03-10T00:00:00Z）。
         try {
-            return LocalDate.parse(s.trim());
+            return OffsetDateTime.parse(raw).toLocalDate();
+        } catch (DateTimeParseException ignore) {
+            // fallback
+        }
+
+        // 兼容前端传完整时间戳（如 2025-03-10T00:00:00）。
+        try {
+            return LocalDateTime.parse(raw, DateTimeFormatter.ISO_LOCAL_DATE_TIME).toLocalDate();
+        } catch (DateTimeParseException ignore) {
+            // fallback
+        }
+
+        for (DateTimeFormatter formatter : LOCAL_DATE_FORMATTERS) {
+            try {
+                return LocalDate.parse(raw, formatter);
+            } catch (DateTimeParseException ignore) {
+                // try next format
+            }
+        }
+
+        // 兼容年月格式（如 2025-03），默认按当月 1 号入库。
+        for (DateTimeFormatter formatter : YEAR_MONTH_FORMATTERS) {
+            try {
+                return YearMonth.parse(raw, formatter).atDay(1);
+            } catch (DateTimeParseException ignore) {
+                // try next format
+            }
+        }
+        try {
+            return LocalDate.parse(raw);
         } catch (DateTimeParseException e) {
             return null;
         }

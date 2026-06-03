@@ -14,13 +14,14 @@ import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.apache.catalina.connector.ClientAbortException;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -34,6 +35,7 @@ import java.util.stream.Collectors;
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
+    /** 区分 prod/dev：控制日志详细度与兜底响应是否带异常 toString */
     @Resource
     private SystemEnvironment systemEnvironment;
 
@@ -80,6 +82,19 @@ public class GlobalExceptionHandler {
         return ResponseDTO.userErrorParam(joined.isEmpty() ? UserErrorCode.PARAM_ERROR.getMsg() : joined);
     }
 
+    /** 浏览器访问 doc.html 时自动请求 favicon，无静态文件时不记 ERROR */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Void> noResourceFound(NoResourceFoundException e) {
+        String path = e.getResourcePath();
+        if (path != null && path.contains("favicon.ico")) {
+            return ResponseEntity.notFound().build();
+        }
+        if (!systemEnvironment.isProd()) {
+            log.debug("静态资源不存在: {}", path);
+        }
+        return ResponseEntity.notFound().build();
+    }
+
     /** 业务层显式抛出的可预期失败，不向客户端暴露堆栈 */
     @ResponseBody
     @ExceptionHandler(BusinessException.class)
@@ -93,9 +108,11 @@ public class GlobalExceptionHandler {
     /**
      * 客户端在服务端写完响应前关闭连接：扩展/浏览器超时、用户取消、代理或本机软件中断等。
      * 常见于 AI 填表等长耗时接口；连接已不可用，无需再写 JSON 体，仅打 debug 避免误报「系统错误」。
+     * <p>
+     * {@code AsyncRequestNotUsableException} 自 Spring Framework 6.2 才有；Boot 3.2 仅处理 Tomcat {@link ClientAbortException}。
      */
-    @ExceptionHandler({AsyncRequestNotUsableException.class, ClientAbortException.class})
-    public void clientAbortedRequest(Exception e) {
+    @ExceptionHandler(ClientAbortException.class)
+    public void clientAbortedRequest(ClientAbortException e) {
         log.debug("客户端已中止连接(超时或主动取消), url={}", currentRequestUri());
     }
 

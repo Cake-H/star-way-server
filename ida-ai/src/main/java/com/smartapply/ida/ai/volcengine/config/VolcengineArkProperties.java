@@ -30,6 +30,11 @@ public class VolcengineArkProperties {
      */
     private PluginAutofill pluginAutofill = new PluginAutofill();
 
+    /**
+     * 正式客户端「面试复盘」：口述/转写文本 → 场次元信息 + 多题结构化 JSON。
+     */
+    private InterviewSummarize interviewSummarize = new InterviewSummarize();
+
     @Data
     public static class ResumeParse {
         private String model = "doubao-seed-2-0-lite-260215";
@@ -88,17 +93,34 @@ public class VolcengineArkProperties {
         private boolean responseFormatJsonObject = true;
     }
 
+    @Data
+    public static class InterviewSummarize {
+        /** 留空则回落 {@link ResumeParse#getModel()} */
+        private String model = "";
+        private double temperature = 0.3;
+        private String thinkingType = "disabled";
+        private String reasoningEffort = "";
+        /** 多题 + 长评价时建议 ≥8192，避免 JSON 截断 */
+        private int maxTokens = 8192;
+        private boolean responseFormatJsonObject = true;
+        /** 参与 {@link com.smartapply.ida.ai.volcengine.autoconfigure.VolcengineArkAutoConfiguration} 中 arkRestClient 读超时取 max */
+        private int readTimeoutMs = 120000;
+    }
+
     /** 从环境中解析 API Key；未配置时返回 null */
     public String resolveApiKey() {
         String name = envApiKey == null || envApiKey.isBlank() ? "ARK_API_KEY" : envApiKey.trim();
+        // 优先：操作系统环境变量（生产推荐）
         String v = System.getenv(name);
         if (v != null && !v.isBlank()) {
             return v.trim();
         }
+        // 次选：JVM -D 同名属性（本地 IDE 运行常用）
         v = System.getProperty(name);
         if (v != null && !v.isBlank()) {
             return v.trim();
         }
+        // 兼容历史固定键名
         v = System.getProperty("ark.api.key");
         return v != null && !v.isBlank() ? v.trim() : null;
     }

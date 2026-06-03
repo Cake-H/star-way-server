@@ -27,7 +27,7 @@ public interface AppResumeDraftService {
     ResumeSaveDraftResultVO updateResume(long userId, long resumeId, ResumeUpdateRequest request);
 
     /**
-     * 软删除简历（REST {@code DELETE}）：主表写入 {@code deleted_at}，子表行保留（便于审计或后续扩展「回收站」）。
+     * 软删除简历（REST {@code DELETE}）：主表经 MyBatis-Plus 逻辑删除写 {@code deleted_at}，子表行保留（便于审计或后续扩展「回收站」）。
      * <p>
      * 若删除的是当前用户的默认简历，则自动将「未删除且更新时间最新」的一份简历设为默认；若无其它简历则不再存在默认。
      *

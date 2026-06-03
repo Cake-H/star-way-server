@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.3</version>
+        <version>3.2.0</version>
         <relativePath/>
     </parent>
 
@@ -30,7 +30,9 @@
     <properties>
         <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <springdoc-openapi.version>2.8.5</springdoc-openapi.version>
+        <knife4j.version>4.5.0</knife4j.version>
+        <!-- 与 knife4j-openapi3-jakarta 内嵌的 springdoc 版本一致，勿单独升到 2.8.x -->
+        <springdoc.version>2.3.0</springdoc.version>
         <mybatis-plus.version>3.5.10.1</mybatis-plus.version>
     </properties>
 
@@ -73,10 +75,23 @@
                 <artifactId>ida-plugin-server</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!-- Boot 3 使用 jakarta 版；BOM 内锁定与 Knife4j 兼容的 SpringDoc 版本 -->
+            <dependency>
+                <groupId>com.github.xiaoymin</groupId>
+                <artifactId>knife4j-dependencies</artifactId>
+                <version>${knife4j.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.github.xiaoymin</groupId>
+                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+                <version>${knife4j.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.springdoc</groupId>
-                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-                <version>${springdoc-openapi.version}</version>
+                <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
+                <version>${springdoc.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -10,7 +10,8 @@ import lombok.NoArgsConstructor;
  * 复合控件的一段子赋值：例如手机号「区号 + 本地号」、证件「类型 + 号码」。
  * <p>
  * {@code targetRole} 建议取值（小写英文，扩展端与主 {@link PluginFieldAssignmentDto#selector} 组合理解）：
- * {@code dial_code}、{@code local_number}、{@code id_type}、{@code id_number}、{@code part}（泛化多段时）。
+ * {@code dial_code}、{@code local_number}、{@code id_type}、{@code id_number}、{@code date_start}、{@code date_end}、{@code part}（泛化多段时）。
+ * 应与快照 {@link PluginPageFormFieldDto#getCompoundSegment()} 对齐，便于执行期把值写到正确子节点。
  */
 @Data
 @Builder

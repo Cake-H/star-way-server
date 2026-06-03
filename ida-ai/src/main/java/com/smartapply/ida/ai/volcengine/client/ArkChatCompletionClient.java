@@ -17,7 +17,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ArkChatCompletionClient {
 
+    /** 已配置 baseUrl 与读超时的方舟专用 {@link RestClient}（Bean 注入） */
     private final RestClient arkRestClient;
+    /** 读取 {@code ida.volcengine-ark.*}，拼 URL 与默认参数 */
     private final VolcengineArkProperties properties;
 
     /**
@@ -61,9 +63,10 @@ public class ArkChatCompletionClient {
             body.put("max_tokens", maxTokens);
         }
         if (responseFormatJsonObject) {
-            body.put("response_format", Map.of("type", "json_object"));
+            body.put("response_format", Map.of("type", "json_object")); // OpenAI 兼容 JSON 模式
         }
 
+        // 同步阻塞直至响应体读完（读超时见 VolcengineArkProperties.ResumeParse.readTimeoutMs 等配置）
         return arkRestClient.post()
                 .uri(properties.getBaseUrl() + "/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
