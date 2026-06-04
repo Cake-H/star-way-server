@@ -1,5 +1,6 @@
 package com.smartapply.ida.ai.speech.autoconfigure;
 
+import com.smartapply.ida.ai.speech.client.SpeechTranscriptionClient;
 import com.smartapply.ida.ai.speech.client.WhisperTranscriptionClient;
 import com.smartapply.ida.ai.speech.config.SpeechToTextProperties;
 import org.apache.hc.client5.http.classic.HttpClient;
@@ -12,18 +13,18 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * Whisper 听写专用 {@link RestClient}（读超时见 {@link SpeechToTextProperties#getReadTimeoutMs()}），与方舟 Chat 客户端分离。
+ * OpenAI Whisper 听写（{@code provider=whisper} 时生效）。
  */
 @AutoConfiguration
 @ConditionalOnClass(RestClient.class)
-@ConditionalOnProperty(prefix = "ida.speech-to-text", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnExpression("${ida.speech-to-text.enabled:true} && '${ida.speech-to-text.provider:aliyun}' == 'whisper'")
 public class SpeechToTextAutoConfiguration {
 
     @Bean
@@ -32,7 +33,7 @@ public class SpeechToTextAutoConfiguration {
             SpeechToTextProperties properties,
             @Value("${http.pool.max-total:20}") int maxTotal,
             @Value("${http.pool.connect-timeout:5000}") int connectTimeoutMs) {
-        int readMs = properties.getReadTimeoutMs();
+        int readMs = properties.getWhisper().getReadTimeoutMs();
         PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
         connectionManager.setMaxTotal(maxTotal);
         connectionManager.setDefaultMaxPerRoute(Math.max(2, maxTotal / 4));
@@ -53,9 +54,9 @@ public class SpeechToTextAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(SpeechTranscriptionClient.class)
     @ConditionalOnClass(MultipartFile.class)
-    public WhisperTranscriptionClient whisperTranscriptionClient(
+    public SpeechTranscriptionClient whisperSpeechTranscriptionClient(
             @Qualifier("whisperRestClient") RestClient whisperRestClient,
             SpeechToTextProperties properties) {
         return new WhisperTranscriptionClient(whisperRestClient, properties);

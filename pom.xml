@@ -34,6 +34,7 @@
         <!-- 与 knife4j-openapi3-jakarta 内嵌的 springdoc 版本一致，勿单独升到 2.8.x -->
         <springdoc.version>2.3.0</springdoc.version>
         <mybatis-plus.version>3.5.10.1</mybatis-plus.version>
+        <aliyun-nls-sdk.version>2.2.9</aliyun-nls-sdk.version>
     </properties>
 
     <dependencyManagement>
@@ -92,6 +93,16 @@
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
                 <version>${springdoc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.nls</groupId>
+                <artifactId>nls-sdk-transcriber</artifactId>
+                <version>${aliyun-nls-sdk.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.nls</groupId>
+                <artifactId>nls-sdk-common</artifactId>
+                <version>${aliyun-nls-sdk.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

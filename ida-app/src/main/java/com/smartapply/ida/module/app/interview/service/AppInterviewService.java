@@ -30,7 +30,7 @@ public interface AppInterviewService {
     /**
      * 将口述转为多题结构化草稿（含从口述抽取的场次元信息）。
      * <p>
-     * {@code rawTranscript} 足够长时优先使用（浏览器 Web Speech）；否则对 {@code file} 走 Whisper 听写。
+     * {@code rawTranscript} 足够长时优先使用；否则对 {@code file} 走服务端听写（见 {@code ida.speech-to-text.provider}）。
      */
     InterviewVoiceSummarizeResultVO voiceSummarize(long userId, long sessionId, MultipartFile file, String rawTranscript);
 }

@@ -1,4 +1,5 @@
 # 火山方舟 HTTP 客户端与 ArkChatCompletionClient（供 ResumeArkStructuringService 等注入）
 com.smartapply.ida.ai.volcengine.autoconfigure.VolcengineArkAutoConfiguration
 com.smartapply.ida.ai.speech.autoconfigure.SpeechToTextPropertiesAutoConfiguration
+com.smartapply.ida.ai.speech.autoconfigure.AliyunSpeechAutoConfiguration
 com.smartapply.ida.ai.speech.autoconfigure.SpeechToTextAutoConfiguration

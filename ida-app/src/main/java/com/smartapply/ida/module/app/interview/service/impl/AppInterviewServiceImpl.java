@@ -2,7 +2,7 @@ package com.smartapply.ida.module.app.interview.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.smartapply.ida.ai.interview.InterviewSummarizeAiService;
-import com.smartapply.ida.ai.speech.client.WhisperTranscriptionClient;
+import com.smartapply.ida.ai.speech.client.SpeechTranscriptionClient;
 import com.smartapply.ida.ai.speech.config.SpeechToTextProperties;
 import com.smartapply.ida.common.domain.interview.InterviewQuestion;
 import com.smartapply.ida.common.domain.interview.InterviewSession;
@@ -32,7 +32,7 @@ import java.util.List;
  * 面试复盘落库与 AI 总结编排。
  * <p>
  * <b>数据策略：</b>场次/问题均通过 {@link com.baomidou.mybatisplus.annotation.TableLogic} 软删；列表展示 {@code question_count} 冗余字段，在增删问题时重算。
- * <b>语音链路：</b>听写（Whisper 或前端 {@code rawTranscript}）→ {@link InterviewSummarizeAiService} 结构化；
+ * <b>语音链路：</b>听写（阿里云实时识别 / Whisper / 前端 {@code rawTranscript}）→ {@link InterviewSummarizeAiService} 结构化；
  * 不在本类内自动更新场次元信息，由前端核对后 {@code PUT /sessions/{id}}。
  */
 @Slf4j
@@ -44,7 +44,7 @@ public class AppInterviewServiceImpl implements AppInterviewService {
     private final InterviewQuestionMapper interviewQuestionMapper;
     private final InterviewSessionGuard sessionGuard;
     private final InterviewSummarizeAiService interviewSummarizeAiService;
-    private final ObjectProvider<WhisperTranscriptionClient> whisperClientProvider;
+    private final ObjectProvider<SpeechTranscriptionClient> speechTranscriptionClientProvider;
     private final SpeechToTextProperties speechToTextProperties;
 
     @Override
@@ -186,6 +186,7 @@ public class AppInterviewServiceImpl implements AppInterviewService {
     public InterviewVoiceSummarizeResultVO voiceSummarize(long userId, long sessionId, MultipartFile file, String rawTranscript) {
         InterviewSession session = sessionGuard.requireOwned(userId, sessionId);
         String transcript = resolveTranscript(file, rawTranscript);
+        log.info("面试语音转写全文 sessionId={} len={} text={}", sessionId, transcript.length(), transcript);
         InterviewVoiceSummarizeResultVO result = interviewSummarizeAiService.summarize(session, transcript);
         log.info("面试语音总结完成 sessionId={} questionCount={}", sessionId,
                 result.getQuestions() != null ? result.getQuestions().size() : 0);
@@ -193,7 +194,7 @@ public class AppInterviewServiceImpl implements AppInterviewService {
     }
 
     /**
-     * 得到供大模型使用的纯文本口述稿：优先浏览器转写，不足阈值再 Whisper 听写录音。
+     * 得到供大模型使用的纯文本口述稿：优先浏览器转写，不足阈值再服务端听写（阿里云 / Whisper）。
      */
     private String resolveTranscript(MultipartFile file, String rawTranscript) {
         String trimmed = rawTranscript != null ? rawTranscript.trim() : "";
@@ -201,7 +202,7 @@ public class AppInterviewServiceImpl implements AppInterviewService {
             return trimmed;
         }
         if (file != null && !file.isEmpty()) {
-            WhisperTranscriptionClient client = whisperClientProvider.getIfAvailable();
+            SpeechTranscriptionClient client = speechTranscriptionClientProvider.getIfAvailable();
             if (client == null) {
                 throw new BusinessException("听写服务未启用，请改用文字输入或配置 ida.speech-to-text");
             }

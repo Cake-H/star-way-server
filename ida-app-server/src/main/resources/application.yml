@@ -112,12 +112,23 @@ ida:
       read-timeout-ms: 120000
 
   speech-to-text:
-    enabled: false
-    env-api-key: OPENAI_API_KEY
-    base-url: https://api.openai.com/v1
-    model: whisper-1
-    read-timeout-ms: 120000
+    enabled: true
+    # aliyun：智能语音交互实时识别（默认）；whisper：OpenAI 兼容听写
+    provider: aliyun
     min-transcript-chars: 10
+    aliyun:
+      app-key: ${ALIYUN_NLS_APP_KEY:UOW65lvdlNg9TN1E}
+      access-key-id: ${ALIBABA_ACCESS_KEY_ID:}
+      access-key-secret: ${ALIBABA_ACCESS_KEY_SECRET:}
+      region-id: cn-shanghai
+      sample-rate: 16000
+      read-timeout-ms: 300000
+      send-chunk-bytes: 3200
+    whisper:
+      env-api-key: OPENAI_API_KEY
+      base-url: https://api.openai.com/v1
+      model: whisper-1
+      read-timeout-ms: 120000
 
   crypto:
     bcrypt:

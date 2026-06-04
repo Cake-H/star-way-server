@@ -14,25 +14,23 @@ import java.io.IOException;
 
 /**
  * OpenAI 兼容 {@code POST /v1/audio/transcriptions}，将录音转为纯文本（<b>非</b>大模型 Chat）。
- * <p>
- * 与 ida-app 中面试总结服务配合：先听写得到 transcript，再交给 Chat 做结构化。
  */
 @RequiredArgsConstructor
-public class WhisperTranscriptionClient {
+public class WhisperTranscriptionClient implements SpeechTranscriptionClient {
 
     private final RestClient whisperRestClient;
     private final SpeechToTextProperties properties;
 
-    /**
-     * @return 听写正文；空串表示模型未识别出内容
-     */
+    @Override
     public String transcribe(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("音频文件为空");
         }
-        String apiKey = properties.resolveApiKey();
+        SpeechToTextProperties.Whisper whisper = properties.getWhisper();
+        String apiKey = whisper.resolveApiKey();
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("未配置听写 API Key，请设置环境变量 " + properties.getEnvApiKey());
+            throw new IllegalStateException(
+                    "未配置 Whisper API Key，请设置环境变量 " + whisper.getEnvApiKey());
         }
 
         String filename = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "audio.webm";
@@ -45,12 +43,12 @@ public class WhisperTranscriptionClient {
                 return filename;
             }
         }).contentType(MediaType.parseMediaType(file.getContentType() != null ? file.getContentType() : "application/octet-stream"));
-        builder.part("model", properties.getModel());
+        builder.part("model", whisper.getModel());
         builder.part("language", "zh");
 
-        String base = properties.getBaseUrl().endsWith("/")
-                ? properties.getBaseUrl().substring(0, properties.getBaseUrl().length() - 1)
-                : properties.getBaseUrl();
+        String base = whisper.getBaseUrl().endsWith("/")
+                ? whisper.getBaseUrl().substring(0, whisper.getBaseUrl().length() - 1)
+                : whisper.getBaseUrl();
 
         JsonNode root = whisperRestClient.post()
                 .uri(base + "/audio/transcriptions")
