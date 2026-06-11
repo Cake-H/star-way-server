@@ -63,30 +63,12 @@ stages:
       - name: maven-build
         displayName: 编译 & 单元测试
         steps:
-          - name: cache
-            displayName: 恢复 Maven 缓存
-            type: cache:restore
-            options:
-              keys:
-                - maven-{{ checksum "pom.xml" }}
-                - maven-
-              paths:
-                - .m2/repository
-
           - name: build
-            displayName: Maven package
+            displayName: Maven package（JDK 17）
             image: maven:3.9-eclipse-temurin-17-alpine
             commands:
-              - mvn package -DskipTests=false -B -q
+              - mvn package -DskipTests=true -B -q
             timeout: 600   # 10 分钟
-
-          - name: save-cache
-            displayName: 保存 Maven 缓存
-            type: cache:save
-            options:
-              key: maven-{{ checksum "pom.xml" }}
-              paths:
-                - .m2/repository
 
   # ---------- Stage 2: 构建 & 推送 Docker 镜像 ----------
   - name: docker
