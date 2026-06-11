@@ -40,6 +40,9 @@ version: '1.0'
 
 name: ida-cicd
 
+# ★ 禁用 Gitee 自动检测，避免 Java-Maven 插件劫持编译
+autoDetect: false
+
 # -------------------- 触发条件 --------------------
 triggers:
   push:
