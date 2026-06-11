@@ -1,13 +1,11 @@
 package com.smartapply.ida.ai.plugin;
 
-import com.fasterxml.jackson.core.JsonLocation;
-import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.smartapply.ida.ai.volcengine.client.ArkChatCompletionClient;
-import com.smartapply.ida.ai.volcengine.config.VolcengineArkProperties;
+import com.smartapply.ida.ai.langchain4j.assistant.PluginAutofillAssistant;
+import com.smartapply.ida.ai.langchain4j.prompt.PluginAutofillPromptProvider;
+import com.smartapply.ida.ai.plugin.deterministic.DeterministicFieldMatcher;
+import com.smartapply.ida.ai.plugin.deterministic.DeterministicMatchResult;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanRequest;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanResultVO;
 import com.smartapply.ida.common.domain.plugin.autofill.task.PluginAutofillProgressPhase;
@@ -19,24 +17,25 @@ import com.smartapply.ida.common.domain.resume.support.ResumeDraftModuleCountsEx
 import com.smartapply.ida.common.domain.resume.vo.ResumeDetailVO;
 import com.smartapply.ida.common.exception.BusinessException;
 import com.smartapply.ida.module.app.resume.service.AppResumeQueryService;
+import com.smartapply.ida.module.plugin.resume.autofill.PluginAutofillResultCacheService;
+import com.smartapply.ida.module.plugin.resume.autofill.ResumePreloadCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.ResourceAccessException;
 
-import java.net.ConnectException;
-import java.net.URI;
-import java.net.UnknownHostException;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * 插件端「一键填表」AI：独立系统提示词身份（见 {@link PluginAutofillPrompts}），与简历解析链路解耦。
+ * 插件端「一键填表」AI（基于 LangChain4j）：独立系统提示词身份（见 {@link PluginAutofillPromptProvider}），与简历解析链路解耦。
  * <p>
  * <b>与浏览器扩展的分工：</b>扩展必须在 content script 中采集 DOM 生成 {@link com.smartapply.ida.common.domain.plugin.autofill.PluginPageFormSnapshotDto}，
  * 调用本服务拿到 {@link PluginAutofillPlanResultVO} 后，再由扩展按 {@code selector} 写回 DOM；服务端无法直接操作用户浏览器。
@@ -50,14 +49,20 @@ public class PluginFormAutofillAiService {
     /** 单页控件过多时截断，避免提示词爆炸与方舟超时；与清洗逻辑无关的上限 */
     private static final int MAX_FIELDS = 120;
 
-    /** 火山方舟 {@code /chat/completions} 同步 HTTP 客户端（Bean 注入，与简历解析共用实现类） */
-    private final ArkChatCompletionClient arkChatCompletionClient;
-    /** {@code ida.volcengine-ark.*} 绑定：解析 API Key、baseUrl、plugin-autofill 专用模型/思考/ max_tokens 等 */
-    private final VolcengineArkProperties arkProperties;
-    /** Spring 主 ObjectMapper：简历 draft 序列化、页面快照 JSON、模型返回 JSON 均走同一套配置 */
+    /** LangChain4j AI Service：直接返回结构化对象，无需手写 JSON 解析 */
+    private final PluginAutofillAssistant assistant;
+    /** 提示词 Provider：提供系统提示词和用户消息构建 */
+    private final PluginAutofillPromptProvider promptProvider;
+    /** Spring 主 ObjectMapper：简历 draft 序列化、页面快照 JSON 均走同一套配置 */
     private final ObjectMapper objectMapper;
     /** 按 userId + resumeId 拉取简历详情（含 draft）；与 App 端简历接口共用查询服务 */
     private final AppResumeQueryService appResumeQueryService;
+    /** 确定性字段匹配器：clientFieldKey 直接映射 + 标签启发式，覆盖 ~80% 常见字段 */
+    private final DeterministicFieldMatcher deterministicFieldMatcher;
+    /** 结果缓存：相同用户+简历+页面结构 → 命中缓存跳过 LLM */
+    private final PluginAutofillResultCacheService resultCacheService;
+    /** 简历预加载缓存：优先从 Redis 读取，miss 再查 DB */
+    private final ResumePreloadCacheService resumePreloadCacheService;
 
     /**
      * 同步生成填表计划（原 {@code POST /autofill-plan} 路径）：不向外报告细粒度进度，避免重复日志。
@@ -69,12 +74,14 @@ public class PluginFormAutofillAiService {
     /**
      * 生成填表计划并在关键步骤回调 {@code progress}。
      * <p>
-     * <b>进度语义：</b>{@link PluginAutofillProgressPhase#CALLING_MODEL} 对应一次阻塞式 HTTP 调用方舟，
-     * 在思考链 + 长 JSON 场景下可能持续数十秒至数分钟；此间 percent 可停留在 35～55 一带，属预期行为。
-     * 真正「流式 token」需后续对接方舟 SSE，再在本阶段内拆分子事件。
+     * <b>两阶段交付流程：</b>
+     * <ol>
+     *   <li>确定性匹配（clientFieldKey 直接映射 + 标签启发式）—— ~80% 字段，< 1s 完成，通过 partialResult 推送前端</li>
+     *   <li>LLM 推理（仅处理未匹配的 ~20% 字段）—— prompt 体积大幅缩减，推理更快</li>
+     * </ol>
+     * 前端在 RUNNING 状态轮询到 partialResult 时可立即开始填写，无需等待 LLM 返回。
      */
     public PluginAutofillPlanResultVO planAutofill(long userId, PluginAutofillPlanRequest req, PluginAutofillProgressSink progress) {
-        // 异步任务可传 registry 的 sink；同步接口传 null 时退化为空操作，避免分支判断
         PluginAutofillProgressSink p = progress != null ? progress : PluginAutofillProgressSink.noop();
 
         if (req == null || req.getPage() == null) {
@@ -82,7 +89,6 @@ public class PluginFormAutofillAiService {
         }
         p.onProgress(PluginAutofillProgressPhase.RECEIVED, "请求体与 page 快照已校验", 8);
 
-        // 扩展采集的 DOM 控件列表；可能为 null（上面已保证 page 非 null）
         List<PluginPageFormFieldDto> rawFields = req.getPage().getFields();
         if (rawFields == null || rawFields.isEmpty()) {
             p.onProgress(PluginAutofillProgressPhase.SANITIZING_PLAN, "控件列表为空，跳过大模型，直接返回不可填说明", 90);
@@ -97,25 +103,81 @@ public class PluginFormAutofillAiService {
         }
         log.info("前端采集的DOM控件列表：{}", rawFields);
 
-        p.onProgress(PluginAutofillProgressPhase.LOADING_RESUME, "正在加载简历 draft，resumeId=" + req.getResumeId(), 14);
-        // 会校验简历归属 userId；无权限或不存在时由下层抛业务异常
-        ResumeDetailVO detail = appResumeQueryService.getResumeDetail(userId, req.getResumeId());
+        // ========== 阶段 1：加载简历（优先 Redis 预加载缓存，miss 查 DB） ==========
+        p.onProgress(PluginAutofillProgressPhase.LOADING_RESUME, "正在加载简历 draft，resumeId=" + req.getResumeId(), 12);
+        ResumeDetailVO detail = resumePreloadCacheService.get(userId, req.getResumeId());
+        if (detail == null) {
+            detail = appResumeQueryService.getResumeDetail(userId, req.getResumeId());
+        }
         if (detail.getDraft() == null) {
             throw new BusinessException("简历内容为空，无法生成填表计划");
         }
+
+        List<PluginPageFormFieldDto> fields = truncateFields(rawFields);
+
+        // ========== 阶段 2：查结果缓存（同用户+同简历版本+同页面结构 → 直接返回） ==========
+        long resumeUpdatedAtMs = detail.getUpdatedAt() != null
+                ? detail.getUpdatedAt().toInstant(ZoneOffset.of("+8")).toEpochMilli()
+                : 0L;
+        String pageUrl = req.getPage().getPageUrl();
+        PluginAutofillPlanResultVO cached = resultCacheService.get(
+                userId, req.getResumeId(), resumeUpdatedAtMs, pageUrl, fields);
+        if (cached != null) {
+            p.onProgress(PluginAutofillProgressPhase.COMPLETED, "命中结果缓存，直接返回", 100);
+            log.info("填表计划命中缓存 userId={} resumeId={}", userId, req.getResumeId());
+            return cached;
+        }
+
+        // ========== 阶段 3：确定性匹配（< 1s，覆盖 ~80% 标准字段） ==========
+        p.onProgress(PluginAutofillProgressPhase.DETERMINISTIC_MATCHING, "正在执行确定性字段匹配", 18);
+        DeterministicMatchResult detResult;
+        try {
+            detResult = deterministicFieldMatcher.matchAll(fields, detail.getDraft());
+        } catch (Exception e) {
+            // 确定性层任何异常 → 降级为全部字段交 LLM
+            log.warn("确定性匹配异常，降级全部交 LLM: {}", e.getMessage(), e);
+            detResult = DeterministicMatchResult.allUnmatched(fields);
+        }
+
+        // 推送 partialResult：前端可在 RUNNING 状态立即开始填写已匹配的字段
+        if (!detResult.getMatchedAssignments().isEmpty()) {
+            PluginAutofillPlanResultVO partial = PluginAutofillPlanResultVO.builder()
+                    .fillable(true)
+                    .hint("确定性匹配已完成，剩余字段正在调用 AI 处理")
+                    .assignments(detResult.getMatchedAssignments())
+                    .blockedFields(detResult.getBlockedFields())
+                    .build();
+            p.onPartialResult(partial);
+            p.onProgress(PluginAutofillProgressPhase.DETERMINISTIC_MATCHING,
+                    "确定性匹配完成: 已匹配=" + detResult.getMatchedAssignments().size()
+                            + " 未匹配=" + detResult.getUnmatchedFields().size(), 22);
+        }
+
+        // ========== 阶段 4：若全部字段已匹配 → 跳过 LLM ==========
+        if (detResult.getUnmatchedFields().isEmpty()) {
+            log.info("全部字段已由确定性匹配覆盖，跳过 LLM userId={} resumeId={}", userId, req.getResumeId());
+            PluginAutofillPlanResultVO fullResult = PluginAutofillPlanResultVO.builder()
+                    .fillable(true)
+                    .assignments(detResult.getMatchedAssignments())
+                    .blockedFields(detResult.getBlockedFields())
+                    .build();
+            // 写入结果缓存
+            resultCacheService.put(userId, req.getResumeId(), resumeUpdatedAtMs, pageUrl, fields, fullResult);
+            p.onProgress(PluginAutofillProgressPhase.COMPLETED, "全部字段确定性匹配完成，无需调用 LLM", 100);
+            return fullResult;
+        }
+
+        // ========== 阶段 5：构建缩减版 prompt（仅未匹配字段） ==========
         String resumeJson;
         try {
-            // PART_A：嵌入用户消息，供模型对照填写
             resumeJson = objectMapper.writeValueAsString(detail.getDraft());
         } catch (JsonProcessingException e) {
             throw new BusinessException("简历数据序列化失败");
         }
 
-        // 截断后列表用于白名单校验与 toPageFieldsJson
-        List<PluginPageFormFieldDto> fields = truncateFields(rawFields);
-        // PART_B：pageUrl/pageTitle + fields 数组（含扩展可选提供的 compoundSegment / interactionMode / optionLabelsSample）
-        String pageJson = toPageFieldsJson(req, fields);
-        // PART_C：与云端简历子表条数一致，提示模型「应有多少段经历/项目」并辅助 hint；与前端 GET autofill-context 同源统计
+        // PART_B 仅包含未匹配的字段，大幅缩减 prompt 体积
+        List<PluginPageFormFieldDto> unmatchedFields = detResult.getUnmatchedFields();
+        String pageJson = toPageFieldsJson(req, unmatchedFields);
         String moduleCountsJson;
         try {
             moduleCountsJson = objectMapper.writeValueAsString(ResumeDraftModuleCountsExtractor.fromDraft(detail.getDraft()));
@@ -123,115 +185,106 @@ public class PluginFormAutofillAiService {
             throw new BusinessException("简历模块统计序列化失败");
         }
         p.onProgress(PluginAutofillProgressPhase.BUILDING_PROMPT,
-                "已序列化简历、页面字段与模块条数 PART_C（控件数=" + fields.size() + "），准备构造方舟消息体", 24);
+                "已序列化简历与未匹配字段（LLM 待处理控件数=" + unmatchedFields.size()
+                        + "，确定性已匹配=" + detResult.getMatchedAssignments().size() + "）", 28);
 
-        // 读环境变量 / 系统属性，与简历解析共用同一 Key
-        String apiKey = arkProperties.resolveApiKey();
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new BusinessException("未配置火山方舟 API Key，请设置环境变量 " + arkProperties.getEnvApiKey());
-        }
+        // ========== 阶段 6：调用 LangChain4j AI Service（字段少 → 推理更快） ==========
+        String userMessage = promptProvider.buildUserMessage(resumeJson, pageJson, moduleCountsJson);
 
-        // 填表专用 model 未配置时回落到简历解析模型，便于单机只配一个 endpoint
-        String model = resolveAutofillModel();
-        double temperature = arkProperties.getPluginAutofill().getTemperature();
-        // pf：thinking、reasoning、max_tokens、response_format 等均取自该嵌套配置块
-        var pf = arkProperties.getPluginAutofill();
-
-        // OpenAI 兼容 messages：单轮 user 内拼 PART_A + PART_B + PART_C（模块条数）
-        String userContent = PluginAutofillPrompts.USER_PREFIX + resumeJson + PluginAutofillPrompts.USER_MIDDLE + pageJson
-                + PluginAutofillPrompts.USER_PARTC_PREFIX + moduleCountsJson;
-        List<Map<String, Object>> messages = List.of(
-                Map.of("role", "system", "content", PluginAutofillPrompts.SYSTEM.trim()),
-                Map.of("role", "user", "content", userContent)
-        );
-
-        // 0 表示不下发 max_tokens，交给方舟默认
-        Integer maxTokens = pf.getMaxTokens() > 0 ? pf.getMaxTokens() : null;
-
-        /*
-         * 以下 chatCompletions 为同步 HTTP：当前线程（Tomcat 或 plugin-autofill-* 线程池）会阻塞到方舟返回全文。
-         * 异步模式下阻塞的是线程池线程，故网关/浏览器不会因本连接过长而超时；进度百分比在此阶段可长时间不变，属预期。
-         */
         p.onProgress(PluginAutofillProgressPhase.CALLING_MODEL,
-                "正在调用火山方舟 model=" + model + "（阻塞直至整段响应返回，请耐心等待）", 38);
-
-        JsonNode root;
-        try {
-            // 重载：带填表专用 thinking/reasoning/max_tokens/json_object，与简历解析那路参数分离
-            root = arkChatCompletionClient.chatCompletions(
-                    apiKey, model, temperature, messages,
-                    pf.getThinkingType(), pf.getReasoningEffort(), maxTokens,
-                    pf.isResponseFormatJsonObject());
-        } catch (ResourceAccessException e) {
-            // 超时、DNS、连接拒绝等 → 转成用户可读中文，不暴露堆栈
-            throw translateArkNetworkFailure(e);
-        }
-
-        if (root == null) {
-            throw new BusinessException("方舟接口返回空响应");
-        }
-        // 方舟错误时 HTTP 仍 200，body 里带 error 对象
-        JsonNode err = root.get("error");
-        if (err != null && !err.isNull()) {
-            String msg = err.path("message").asText("方舟接口错误");
-            log.warn("插件填表方舟错误: {}", root);
-            throw new BusinessException("一键填表失败：" + msg);
-        }
-
-        p.onProgress(PluginAutofillProgressPhase.CALLING_MODEL, "方舟 HTTP 已返回，正在读取 choices[0].message.content", 55);
-
-        // 标准 chat.completions 正文路径；若模型只返回 tool_calls 此处可能为空（当前提示词未用工具）
-        String content = root.path("choices").path(0).path("message").path("content").asText(null);
-        if (content == null || content.isBlank()) {
-            throw new BusinessException("模型未返回可解析内容");
-        }
-
-        // 部分模型仍包 ```json 围栏，去掉后再 parse
-        String json = stripMarkdownFence(content.trim());
-
-        log.info("模型返回json: \n{}", json);
-
-
-        p.onProgress(PluginAutofillProgressPhase.PARSING_MODEL_JSON, "开始 Jackson 解析模型 JSON，长度=" + json.length(), 65);
+                "正在调用大模型（LLM 仅处理 " + unmatchedFields.size() + " 个未匹配字段）", 38);
 
         PluginAutofillPlanResultVO parsed;
         try {
-            JsonNode rootNode = objectMapper.readTree(json);
-            if (!rootNode.isObject()) {
-                throw new BusinessException("模型返回的根节点不是 JSON 对象");
-            }
-            ObjectNode obj = (ObjectNode) rootNode;
-            // JSON 模式/部分模型会漏掉 fillable；boolean 缺省反序列化为 false 会误丢 assignments，故在此补全
-            if (!obj.has("fillable") || obj.get("fillable").isNull()) {
-                int n = obj.path("assignments").isArray() ? obj.get("assignments").size() : 0;
-                boolean infer = n > 0;
-                obj.put("fillable", infer);
-                if (infer) {
-                    log.info("填表模型 JSON 未包含 fillable，已根据 assignments 条数={} 推断为 true", n);
-                }
-            }
-            parsed = objectMapper.treeToValue(obj, PluginAutofillPlanResultVO.class);
-        } catch (JsonProcessingException e) {
-            // 辅助判断：length 截断时优先提示加 max_tokens
-            String finish = root.path("choices").path(0).path("finish_reason").asText("");
-            log.warn("填表模型输出非合法 JSON，finish_reason={}，JSON 长度={}，前 200 字: {}；{}",
-                    finish, json.length(), json.length() > 200 ? json.substring(0, 200) : json,
-                    jsonParseErrorSnippet(json, e), e);
-            if ("length".equalsIgnoreCase(finish)) {
-                throw new BusinessException("模型输出因长度上限被截断，无法解析为 JSON。请提高 ida.volcengine-ark.plugin-autofill.max-tokens 后重试。");
-            }
-            throw new BusinessException("模型返回的 JSON 无法解析（多为某条 assignment 的 value 中含未转义的双引号或裸换行）。请重试；若方舟报参数错误可关闭 ida.volcengine-ark.plugin-autofill.response-format-json-object。");
+            parsed = assistant.planAutofill(PluginAutofillPromptProvider.SYSTEM, userMessage);
+        } catch (Exception e) {
+            log.error("填表调用大模型失败 userId={} resumeId={}", userId, req.getResumeId(), e);
+            throw new BusinessException("调用大模型失败：" + e.getMessage());
         }
 
-        p.onProgress(PluginAutofillProgressPhase.SANITIZING_PLAN, "正在执行 selector 白名单、锚点合并与 blockedFields 清洗", 82);
-        // parsed 中 selector 可能不在快照内，此处统一过滤并合并锚点
-        PluginAutofillPlanResultVO out = sanitizePlan(parsed, fields);
+        if (parsed == null) {
+            throw new BusinessException("模型未返回有效结果");
+        }
+
+        // 补全 fillable（如果模型未返回）
+        if (!parsed.isFillable() && parsed.getAssignments() != null && !parsed.getAssignments().isEmpty()) {
+            parsed.setFillable(true);
+            log.info("填表模型 JSON 未包含 fillable，已根据 assignments 条数推断为 true");
+        }
+
+        p.onProgress(PluginAutofillProgressPhase.PARSING_MODEL_JSON, "模型结果已解析", 65);
+
+        // ========== 阶段 7：清洗 LLM 结果（selector 白名单基于全量字段，确保 LLM 返回的 selector 均在快照中） ==========
+        p.onProgress(PluginAutofillProgressPhase.SANITIZING_PLAN, "正在执行 selector 白名单、锚点合并与 blockedFields 清洗", 78);
+        PluginAutofillPlanResultVO llmResult = sanitizePlan(parsed, fields);
+
+        // ========== 阶段 8：合并确定性结果 + LLM 结果 ==========
+        PluginAutofillPlanResultVO merged = mergeResults(detResult, llmResult);
+
+        // ========== 阶段 9：写入结果缓存 ==========
+        resultCacheService.put(userId, req.getResumeId(), resumeUpdatedAtMs, pageUrl, fields, merged);
+
         p.onProgress(PluginAutofillProgressPhase.COMPLETED, "填表计划生成完毕", 100);
-        log.info("填表计划完成 userId={} resumeId={} fillable={} assignments={} blockedFields={}",
-                userId, req.getResumeId(), out.isFillable(),
-                out.getAssignments() == null ? 0 : out.getAssignments().size(),
-                out.getBlockedFields() == null ? 0 : out.getBlockedFields().size());
-        return out;
+        log.info("填表计划完成 userId={} resumeId={} fillable={} assignments={} blockedFields={} (确定性={} LLM={})",
+                userId, req.getResumeId(), merged.isFillable(),
+                merged.getAssignments() == null ? 0 : merged.getAssignments().size(),
+                merged.getBlockedFields() == null ? 0 : merged.getBlockedFields().size(),
+                detResult.getMatchedAssignments().size(),
+                llmResult.getAssignments() == null ? 0 : llmResult.getAssignments().size());
+        return merged;
+    }
+
+    /**
+     * 合并确定性匹配结果与 LLM 结果：确定性匹配的 assignment 优先，LLM 结果中与之重复的 selector 被丢弃。
+     * order 从 1 开始重新分配（确定性字段在前，LLM 字段在后）。
+     */
+    private PluginAutofillPlanResultVO mergeResults(DeterministicMatchResult detResult,
+                                                    PluginAutofillPlanResultVO llmResult) {
+        List<PluginFieldAssignmentDto> merged = new ArrayList<>();
+
+        // 确定性匹配的 selector 集合——用于去重
+        Set<String> detSelectors = new HashSet<>();
+        for (PluginFieldAssignmentDto a : detResult.getMatchedAssignments()) {
+            detSelectors.add(normalizeSelectorKey(a.getSelector()));
+            merged.add(a);
+        }
+
+        // LLM 结果中与确定性层不重复的 assignment 追加到末尾
+        if (llmResult.getAssignments() != null) {
+            for (PluginFieldAssignmentDto a : llmResult.getAssignments()) {
+                String normSel = normalizeSelectorKey(a.getSelector());
+                if (!detSelectors.contains(normSel)) {
+                    merged.add(a);
+                }
+            }
+        }
+
+        // 重新编号 order（确定性字段在前，LLM 字段在后）
+        for (int i = 0; i < merged.size(); i++) {
+            merged.get(i).setOrder(i + 1);
+        }
+
+        // 合并 blockedFields（去重）
+        List<PluginBlockedFieldDto> allBlocked = new ArrayList<>(detResult.getBlockedFields());
+        Set<String> blockedSelectors = new HashSet<>();
+        for (PluginBlockedFieldDto b : allBlocked) {
+            blockedSelectors.add(normalizeSelectorKey(b.getSelector()));
+        }
+        if (llmResult.getBlockedFields() != null) {
+            for (PluginBlockedFieldDto b : llmResult.getBlockedFields()) {
+                if (!blockedSelectors.contains(normalizeSelectorKey(b.getSelector()))) {
+                    allBlocked.add(b);
+                }
+            }
+        }
+
+        boolean fillable = !merged.isEmpty() || (llmResult.isFillable());
+        return PluginAutofillPlanResultVO.builder()
+                .fillable(fillable)
+                .hint(llmResult.getHint())
+                .assignments(merged)
+                .blockedFields(allBlocked)
+                .build();
     }
 
     private List<PluginPageFormFieldDto> truncateFields(List<PluginPageFormFieldDto> rawFields) {
@@ -489,7 +542,7 @@ public class PluginFormAutofillAiService {
     private static void normalizeAssignmentMeta(PluginFieldAssignmentDto a) {
         if (a.getMatchType() != null && StringUtils.hasText(a.getMatchType())) {
             String m = a.getMatchType().trim().toLowerCase(Locale.ROOT);
-            if (!List.of("exact", "fuzzy", "guess").contains(m)) {
+            if (!List.of("exact", "fuzzy", "guess", "deterministic").contains(m)) {
                 a.setMatchType(null); // 非法枚举去掉，前端只展示合法三态
             } else {
                 a.setMatchType(m);
@@ -506,76 +559,5 @@ public class PluginFormAutofillAiService {
         if (a.getSkipReason() != null && StringUtils.hasText(a.getSkipReason())) {
             a.setSkipReason(a.getSkipReason().trim().toLowerCase(Locale.ROOT));
         }
-    }
-
-    private String resolveAutofillModel() {
-        String m = arkProperties.getPluginAutofill().getModel();
-        if (StringUtils.hasText(m)) {
-            return m.trim();
-        }
-        return arkProperties.getResumeParse().getModel(); // 回落
-    }
-
-    private BusinessException translateArkNetworkFailure(ResourceAccessException e) {
-        String baseUrl = arkProperties.getBaseUrl();
-        String host;
-        try {
-            host = URI.create(baseUrl).getHost(); // 用户可读：指出解析失败的域名
-        } catch (Exception ex) {
-            host = baseUrl;
-        }
-        Throwable cause = e.getCause() != null ? e.getCause() : e;
-        if (cause instanceof UnknownHostException) {
-            return new BusinessException("无法访问火山方舟（域名无法解析）：" + host + "。请检查网络/DNS 或 VPN。base-url=" + baseUrl);
-        }
-        if (cause instanceof ConnectException) {
-            return new BusinessException("无法连接火山方舟（连接失败）。base-url=" + baseUrl);
-        }
-        String detail = cause.getMessage() != null ? cause.getMessage() : e.getMessage();
-        return new BusinessException("调用火山方舟失败：" + detail);
-    }
-
-    /** 从 Jackson 异常中取出解析位置，截取原文片段便于确认是否未转义引号等 */
-    private static String jsonParseErrorSnippet(String json, JsonProcessingException e) {
-        JsonLocation loc = null;
-        for (Throwable t = e; t != null; t = t.getCause()) {
-            if (t instanceof JsonParseException jpe) {
-                loc = jpe.getLocation();
-                break;
-            }
-        }
-        if (loc == null || json == null || json.isEmpty()) {
-            return "解析位置不可用";
-        }
-        int pos = -1;
-        long charOff = loc.getCharOffset();
-        if (charOff >= 0 && charOff < json.length()) {
-            pos = (int) charOff;
-        } else if (loc.getLineNr() == 1 && loc.getColumnNr() >= 0) {
-            // 单行 JSON 时 column 可当作字符偏移近似
-            pos = Math.min(json.length() - 1, Math.max(0, loc.getColumnNr() - 1));
-        }
-        if (pos < 0 || pos >= json.length()) {
-            return String.format("line=%d col=%d", loc.getLineNr(), loc.getColumnNr());
-        }
-        int from = Math.max(0, pos - 100);
-        int to = Math.min(json.length(), pos + 100);
-        String excerpt = json.substring(from, to).replace('\r', ' ').replace('\n', '↵');
-        return String.format("错误附近 pos≈%d: …%s…", pos, excerpt);
-    }
-
-    private static String stripMarkdownFence(String raw) {
-        String s = raw;
-        if (s.startsWith("```")) {
-            int firstNl = s.indexOf('\n');
-            if (firstNl > 0) {
-                s = s.substring(firstNl + 1); // 去掉首行 ``` 或 ```json
-            }
-            int end = s.lastIndexOf("```");
-            if (end > 0) {
-                s = s.substring(0, end); // 去掉尾部闭合围栏
-            }
-        }
-        return s.trim();
     }
 }

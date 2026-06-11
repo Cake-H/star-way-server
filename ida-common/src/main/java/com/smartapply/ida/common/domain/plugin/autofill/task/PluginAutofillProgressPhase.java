@@ -15,6 +15,9 @@ public enum PluginAutofillProgressPhase {
     /** 正在从数据库加载简历草稿并序列化为 JSON */
     LOADING_RESUME,
 
+    /** 正在执行确定性字段匹配（clientFieldKey 直接映射 + 标签启发式 + 下拉选项模糊匹配） */
+    DETERMINISTIC_MATCHING,
+
     /** 正在组装系统提示词、用户消息（简历 + 页面控件快照） */
     BUILDING_PROMPT,
 

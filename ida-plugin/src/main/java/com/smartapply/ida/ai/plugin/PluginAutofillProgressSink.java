@@ -1,5 +1,6 @@
 package com.smartapply.ida.ai.plugin;
 
+import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanResultVO;
 import com.smartapply.ida.common.domain.plugin.autofill.task.PluginAutofillProgressPhase;
 
 /**
@@ -18,6 +19,12 @@ public interface PluginAutofillProgressSink {
      * @param percent 0～100 的近似完成度，供扩展进度条；不要求严格单调
      */
     void onProgress(PluginAutofillProgressPhase phase, String detail, int percent);
+
+    /**
+     * 确定性匹配完成后推送部分结果，前端轮询到后可立即开始填写，无需等待 LLM 返回。
+     * 默认空操作——同步请求无需推送；异步任务由 TaskRegistry 实现写入 TaskRecord。
+     */
+    default void onPartialResult(PluginAutofillPlanResultVO partial) {}
 
     /**
      * 同步 {@code POST /autofill-plan} 使用：空实现，避免向不存在的「任务表」写进度，

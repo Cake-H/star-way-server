@@ -48,6 +48,14 @@ public class PluginFieldAssignmentDto {
     private String i18nLabel;
     private String clientFieldKey;
 
+    /**
+     * 备选值列表（按优先级排序），前端在首选 value 匹配不到下拉选项时依次尝试。
+     * 后端更了解简历原始数据和选项列表上下文，提供备选值可提高命中率。
+     * 例：学历字段 ["大学本科", "本科", "Bachelor"]
+     */
+    @Builder.Default
+    private List<String> fallbackValues = new ArrayList<>();
+
     /** 区号+号码、证件类型+号码等多控件合一语义 */
     @Builder.Default
     private List<PluginSubAssignmentDto> subAssignments = new ArrayList<>();

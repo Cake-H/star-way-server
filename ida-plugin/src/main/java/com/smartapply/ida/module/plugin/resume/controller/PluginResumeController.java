@@ -2,6 +2,7 @@ package com.smartapply.ida.module.plugin.resume.controller;
 
 import com.smartapply.ida.ai.plugin.PluginFormAutofillAiService;
 import com.smartapply.ida.common.domain.ResponseDTO;
+import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillFeedbackRequest;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanRequest;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanResultVO;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillResumeContextVO;
@@ -12,7 +13,9 @@ import com.smartapply.ida.common.domain.resume.vo.ResumeListItemVO;
 import com.smartapply.ida.constant.ApiRouteConstants;
 import com.smartapply.ida.http.annotation.RequestUserId;
 import com.smartapply.ida.module.app.resume.service.AppResumeQueryService;
+import com.smartapply.ida.module.plugin.resume.autofill.PluginAutofillFeedbackService;
 import com.smartapply.ida.module.plugin.resume.autofill.PluginAutofillTaskService;
+import com.smartapply.ida.module.plugin.resume.autofill.ResumePreloadCacheService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -61,13 +64,22 @@ public class PluginResumeController {
      */
     private final AppResumeQueryService appResumeQueryService;
     /**
-     * 一键填表核心：调火山方舟生成 {@link PluginAutofillPlanResultVO}；同步接口直接调 {@link PluginFormAutofillAiService#planAutofill(long, com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanRequest)}。
+     * 一键填表核心：调大模型生成 {@link PluginAutofillPlanResultVO}；
+     * 同步接口直接调 {@link PluginFormAutofillAiService #planAutofill(long, PluginAutofillPlanRequest)}。
      */
     private final PluginFormAutofillAiService pluginFormAutofillAiService;
     /**
      * 异步任务：注册 taskId、往线程池投递 Runnable、供 GET 轮询读内存快照；与 {@link #pluginFormAutofillAiService} 配合使用。
      */
     private final PluginAutofillTaskService pluginAutofillTaskService;
+    /**
+     * 反馈服务：异步写入 Redis，不影响主流程。
+     */
+    private final PluginAutofillFeedbackService pluginAutofillFeedbackService;
+    /**
+     * 简历预加载缓存：autofill-context 请求时提前将简历写入 Redis，planAutofill 直接读取。
+     */
+    private final ResumePreloadCacheService resumePreloadCacheService;
 
     @Operation(summary = "我的简历列表（摘要，与正式客户端列表字段一致）")
     @GetMapping("/list")
@@ -89,7 +101,18 @@ public class PluginResumeController {
             @PathVariable("resumeId") Long resumeId) {
         log.info("收到各模块条目数获取申请，/autofill-context userId={} resumeId={}", userId, resumeId);
         // 只读、无方舟调用；与预览详情共享鉴权
-        return ResponseDTO.ok(appResumeQueryService.getAutofillResumeContext(userId, resumeId));
+        PluginAutofillResumeContextVO context = appResumeQueryService.getAutofillResumeContext(userId, resumeId);
+
+        // 顺带预加载简历到 Redis：planAutofill 时直接从缓存读取，减少 DB 查询延迟
+        try {
+            ResumeDetailVO detail = appResumeQueryService.getResumeDetail(userId, resumeId);
+            resumePreloadCacheService.preload(userId, resumeId, detail);
+        } catch (Exception e) {
+            // 预加载失败不影响 autofill-context 的正常返回
+            log.warn("简历预加载失败，planAutofill 将回退查 DB: {}", e.getMessage());
+        }
+
+        return ResponseDTO.ok(context);
     }
 
     @Operation(summary = "预览简历详情（只读，不含保存/修改语义）")
@@ -151,5 +174,21 @@ public class PluginResumeController {
             @PathVariable("taskId") String taskId) {
         // 短请求：只读内存 Map + userId 校验，不调用方舟
         return ResponseDTO.ok(pluginAutofillTaskService.getTaskStatus(userId, taskId));
+    }
+
+    /**
+     * 前端填写完成后上报逐字段反馈（命中/失败/实际值），异步写入 Redis 队列，
+     * 用于后续统计匹配率和迭代优化 {@link com.smartapply.ida.ai.plugin.deterministic.ChineseFieldAliasTable}。
+     */
+    @Operation(summary = "一键填表：上报字段填写反馈（异步入队，不阻塞）")
+    @PostMapping(value = "/autofill-plan/feedback", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseDTO<Void> submitAutofillFeedback(
+            @RequestUserId(required = true) Long userId,
+            @Valid @RequestBody PluginAutofillFeedbackRequest body) {
+        log.info("收到填表反馈 userId={} resumeId={} fieldCount={}",
+                userId, body.getResumeId(),
+                body.getFields() != null ? body.getFields().size() : 0);
+        pluginAutofillFeedbackService.submitFeedback(userId, body);
+        return ResponseDTO.ok(null);
     }
 }

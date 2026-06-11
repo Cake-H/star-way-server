@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea
+.vscode
+*.iml
+
+# Maven 构建产物（会在容器内重新编译）
+target/
+
+# Docker 自身
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# 文档
+docs/
+*.md
+LICENSE
+
+# 临时文件
+*.log
+*.tmp
+*.rdb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 环境配置（敏感信息通过环境变量注入）
+*.env
+.env.*

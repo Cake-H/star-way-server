@@ -1,7 +1,7 @@
 package com.smartapply.ida.module.app.resume.service.impl;
 
+import com.smartapply.ida.ai.langchain4j.config.LangChain4jProperties;
 import com.smartapply.ida.ai.resume.ResumeArkStructuringService;
-import com.smartapply.ida.ai.volcengine.config.VolcengineArkProperties;
 import com.smartapply.ida.common.domain.resume.vo.ResumeParseResultVO;
 import com.smartapply.ida.common.exception.BusinessException;
 import com.smartapply.ida.integration.oss.AliyunOssStorageService;
@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * App 端：简历上传 → OSS 存档 → 本地抽取纯文本 → 火山方舟大模型结构化。
+ * App 端：简历上传 → OSS 存档 → 本地抽取纯文本 → 大模型结构化。
  * <p>
  * <b>职责边界：</b>本类只做「解析链路」，<b>不写数据库</b>；用户在前端改完草稿后，由
  * {@link com.smartapply.ida.module.app.resume.service.AppResumeDraftService#saveDraft(long, com.smartapply.ida.common.domain.resume.dto.ResumeSaveDraftRequest)}
@@ -27,8 +27,8 @@ import java.util.List;
  * <ol>
  *   <li>OSS：原件按用户隔离路径上传，便于审计与后续重新解析；若未启用 OSS Bean，直接业务异常提示配置。</li>
  *   <li>纯文本：在应用进程内从 {@link MultipartFile} 抽取，避免再经 OSS 下载浪费流量与延迟。</li>
- *   <li>长度：超过 {@code ida.volcengine-ark.resume-parse.max-plain-text-chars} 时截断并记入 {@code parseNotes}，防止超大正文拖垮模型或超时。</li>
- *   <li>大模型：调用方舟 chat/completions，将返回 JSON 反序列化为 {@link com.smartapply.ida.common.domain.resume.dto.parse.ResumeParseDraftDto}。</li>
+ *   <li>长度：超过 {@code ida.langchain4j.resume-parse.max-plain-text-chars} 时截断并记入 {@code parseNotes}，防止超大正文拖垮模型或超时。</li>
+ *   <li>大模型：调用 LangChain4j AI Service，将返回 JSON 反序列化为 {@link com.smartapply.ida.common.domain.resume.dto.parse.ResumeParseDraftDto}。</li>
  * </ol>
  */
 @Slf4j
@@ -40,7 +40,7 @@ public class AppResumeUploadParseSeviceImpl implements AppResumeUploadParseServi
     private final ObjectProvider<AliyunOssStorageService> ossStorageProvider;
     private final ResumePlainTextExtractor plainTextExtractor;
     private final ResumeArkStructuringService arkStructuringService;
-    private final VolcengineArkProperties volcengineArkProperties;
+    private final LangChain4jProperties langChain4jProperties;
 
     /**
      * 同步执行完整解析链路，返回可供前端编辑的草稿 VO（含 OSS 元信息、解析备注与草稿 DTO）。
@@ -63,13 +63,13 @@ public class AppResumeUploadParseSeviceImpl implements AppResumeUploadParseServi
 
         // 步骤 3：按配置截断过长正文，并把原因写入 parseNotes，供前端提示用户补全
         List<String> notes = new ArrayList<>();
-        int maxChars = volcengineArkProperties.getResumeParse().getMaxPlainTextChars();
+        int maxChars = langChain4jProperties.getResumeParse().getMaxPlainTextChars();
         if (plain.length() > maxChars) {
             notes.add("简历纯文本过长，已按配置截断前 " + maxChars + " 字符再送入模型，建议手动补全未展示部分");
             plain = plain.substring(0, maxChars);
         }
 
-        // 步骤 4：调用方舟，将模型输出的 JSON 转为系统内统一的 ResumeParseDraftDto
+        // 步骤 4：调用大模型，将模型输出的 JSON 转为系统内统一的 ResumeParseDraftDto
         var draft = arkStructuringService.structure(plain);
 
         // 日志不落全文，仅记录长度与 OSS 键，降低隐私泄露风险

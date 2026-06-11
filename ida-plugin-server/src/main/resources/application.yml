@@ -1,9 +1,10 @@
+# ============================================================
+# 公共配置 — 所有环境共享（框架、中间件行为、业务参数常量）
+# 环境差异项请在 application-{dev|prod}.yml 中覆盖
+# ============================================================
+
 server:
   port: ${PLUGIN_SERVER_PORT:8089}
-
-logging:
-  level:
-    com.smartapply.ida.plugin: debug
 
 spring:
   application:
@@ -16,103 +17,6 @@ spring:
       max-file-size: 15MB
       max-request-size: 16MB
 
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:ida_db}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:}
-
-  data:
-    redis:
-      host: ${IDA_REDIS_HOST:127.0.0.1}
-      port: ${IDA_REDIS_PORT:6379}
-      password: ${IDA_REDIS_PASSWORD:}
-      database: ${IDA_PLUGIN_REDIS_DB:0}
-      timeout: 3s
-      lettuce:
-        pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 2
-          max-wait: 2s
-
-http:
-  pool:
-    max-total: 20
-    connect-timeout: 5000
-    read-timeout: 30000
-    write-timeout: 30000
-    keep-alive: 300000
-
-ida:
-  server:
-    access-host: ${IDA_ACCESS_HOST:127.0.0.1}
-    api-v1-prefix: /api/v1/plugin
-
-  cors:
-    allowed-origin-patterns:
-      - "*"
-    exposed-headers: []
-
-  http:
-    identity:
-      user-id-header: X-User-Id
-      request-id-header: X-Request-Id
-      authorization-header: Authorization
-
-  aliyun:
-    sms:
-      enabled: false
-      access-key-id: ${ALIBABA_ACCESS_KEY_ID:}
-      access-key-secret: ${ALIBABA_ACCESS_KEY_SECRET:}
-      sign-name: ${ALIBABA_SMS_SIGN_NAME:}
-      template-code: ${ALIBABA_SMS_TEMPLATE_CODE:}
-      scheme-name: ${ALIBABA_DYPNS_SCHEME_NAME:}
-      endpoint: dypnsapi.aliyuncs.com
-    oss:
-      enabled: true
-      endpoint: ${ALIYUN_OSS_ENDPOINT:}
-      access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
-      access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
-      bucket: ${ALIYUN_OSS_BUCKET:}
-      key-prefix: app/resume/
-      public-base-url: ${ALIYUN_OSS_PUBLIC_BASE_URL:}
-  sms:
-    code:
-      length: 6
-      ttl-seconds: 300
-      resend-interval-seconds: 60
-  auth:
-    session:
-      token-ttl-seconds: 604800
-      bearer-prefix: "Bearer "
-
-  volcengine-ark:
-    env-api-key: ARK_API_KEY
-    # base-url: https://ark.cn-beijing.volces.com/api/v3
-    base-url: https://api.deepseek.com
-    resume-parse:
-      model: deepseek-v4-flash
-      max-plain-text-chars: 80000
-      temperature: 0.2
-      thinking-type: disabled
-      read-timeout-ms: 300000
-    plugin-autofill:
-      model: deepseek-v4-flash
-      thinking-type: disabled
-#      reasoning-effort: minimal
-      max-tokens: 16384
-      response-format-json-object: true
-      temperature: 0.15
-
-  crypto:
-    bcrypt:
-      strength: 10
-    aes-field:
-      enabled: false
-      secret: ${IDA_AES_FIELD_SECRET:}
-      salt-hex: ${IDA_AES_FIELD_SALT_HEX:}
-
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
   configuration:
@@ -124,18 +28,14 @@ mybatis-plus:
       logic-not-delete-value: 'null'
       logic-delete-value: 'now()'
 
---- #################### 接口文档配置 ####################
-
+# -------------------- 接口文档 --------------------
 springdoc:
   api-docs:
     enabled: true
     path: /v3/api-docs
-    groups:
-      enabled: true
   swagger-ui:
     enabled: true
     path: /swagger-ui
-    url: /v3/api-docs/plugin
   default-flat-param-object: true
 
 knife4j:
@@ -144,3 +44,58 @@ knife4j:
     language: zh_cn
     enable-default-group: true
     default-group-name: plugin
+
+# -------------------- IDA 公共业务配置 --------------------
+ida:
+  cors:
+    allowed-origin-patterns:
+      - "*"
+    exposed-headers: []
+
+  http:
+    identity:
+      user-id-header: X-User-Id
+      request-id-header: X-Request-Id
+      authorization-header: Authorization
+
+  auth:
+    session:
+      token-ttl-seconds: 604800
+      bearer-prefix: "Bearer "
+
+  sms:
+    code:
+      length: 6
+      ttl-seconds: 300
+      resend-interval-seconds: 60
+
+  crypto:
+    bcrypt:
+      strength: 10
+    aes-field:
+      enabled: false
+      secret: ${IDA_AES_FIELD_SECRET:}
+      salt-hex: ${IDA_AES_FIELD_SALT_HEX:}
+
+  # LangChain4j — 大模型调用参数（各环境一致）
+  langchain4j:
+    env-api-key-name: ARK_API_KEY
+    base-url: https://api.deepseek.com
+    resume-parse:
+      model: deepseek-v4-flash
+      max-plain-text-chars: 80000
+      temperature: 0.2
+      read-timeout-ms: 300000
+      response-format-json-object: true
+    plugin-autofill:
+      model: deepseek-v4-flash
+      temperature: 0.15
+      max-tokens: 16384
+      read-timeout-ms: 300000
+      response-format-json-object: true
+    interview-summarize:
+      model: deepseek-v4-pro
+      temperature: 0.3
+      max-tokens: 8192
+      read-timeout-ms: 120000
+      response-format-json-object: true

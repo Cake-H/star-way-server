@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 插件「一键填表」前置上下文：在采页面 DOM 快照之前，由服务端根据当前简历 draft 给出各模块条目数，
@@ -28,4 +29,11 @@ public class PluginAutofillResumeContextVO {
 
     /** 各可重复模块在云端的真实条数 */
     private PluginResumeModuleCountsVO moduleCounts;
+
+    /**
+     * 各日期字段的精度提示。key 为 clientFieldKey 模式，value 为 "date" 或 "year_month"。
+     * 前端据此决定日期选择器操作方式（完整日期 vs 仅年月），无需猜测。
+     * 例：{"education.*.enrollDate": "year_month", "basic.birthDate": "date"}
+     */
+    private Map<String, String> dateFieldPrecision;
 }

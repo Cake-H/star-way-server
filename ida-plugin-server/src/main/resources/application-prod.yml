@@ -1,0 +1,68 @@
+# ============================================================
+# 生产环境配置 — Docker / K8s 部署使用
+# 所有密钥信息均通过环境变量注入，不提供默认值
+# 启动时设置: SPRING_PROFILES_ACTIVE=prod
+# ============================================================
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT:3306}/${MYSQL_DATABASE}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 5
+      idle-timeout: 300000
+      max-lifetime: 600000
+      connection-timeout: 10000
+
+  data:
+    redis:
+      host: ${IDA_REDIS_HOST}
+      port: ${IDA_REDIS_PORT:6379}
+      password: ${IDA_REDIS_PASSWORD}
+      database: ${IDA_PLUGIN_REDIS_DB:0}
+      timeout: 5s
+      lettuce:
+        pool:
+          max-active: 32
+          max-idle: 16
+          min-idle: 4
+          max-wait: 3s
+
+http:
+  pool:
+    max-total: 50
+    connect-timeout: 5000
+    read-timeout: 30000
+    write-timeout: 30000
+    keep-alive: 300000
+
+ida:
+  server:
+    access-host: ${IDA_ACCESS_HOST}
+    api-v1-prefix: /api/v1/plugin
+
+  aliyun:
+    sms:
+      enabled: ${ALIBABA_SMS_ENABLED:false}
+      access-key-id: ${ALIBABA_ACCESS_KEY_ID}
+      access-key-secret: ${ALIBABA_ACCESS_KEY_SECRET}
+      sign-name: ${ALIBABA_SMS_SIGN_NAME}
+      template-code: ${ALIBABA_SMS_TEMPLATE_CODE}
+      scheme-name: ${ALIBABA_DYPNS_SCHEME_NAME:}
+      endpoint: dypnsapi.aliyuncs.com
+    oss:
+      enabled: ${ALIYUN_OSS_ENABLED:true}
+      endpoint: ${ALIYUN_OSS_ENDPOINT}
+      access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID}
+      access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET}
+      bucket: ${ALIYUN_OSS_BUCKET}
+      key-prefix: app/resume/
+      public-base-url: ${ALIYUN_OSS_PUBLIC_BASE_URL}
+
+logging:
+  level:
+    root: info
+    com.smartapply: info

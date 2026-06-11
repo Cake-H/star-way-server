@@ -61,11 +61,35 @@ public class PluginAutofillTaskRegistry {
     }
 
     /**
-     * 构造与当前 taskId 绑定的进度回调：内部转发到 {@link #touchProgress(String, PluginAutofillProgressPhase, String, int)}。
+     * 构造与当前 taskId 绑定的进度回调：onProgress 转发到 touchProgress，
+     * onPartialResult 将确定性匹配的部分结果写入 TaskRecord，前端轮询即可拿到。
      */
     public PluginAutofillProgressSink sinkFor(String taskId) {
-        // 闭包捕获 taskId，使 PluginFormAutofillAiService 无需感知 Registry 类型（依赖倒置）
-        return (phase, detail, percent) -> touchProgress(taskId, phase, detail, percent);
+        return new PluginAutofillProgressSink() {
+            @Override
+            public void onProgress(PluginAutofillProgressPhase phase, String detail, int percent) {
+                touchProgress(taskId, phase, detail, percent);
+            }
+
+            @Override
+            public void onPartialResult(PluginAutofillPlanResultVO partial) {
+                setPartialResult(taskId, partial);
+            }
+        };
+    }
+
+    /**
+     * 将确定性匹配的部分结果写入任务记录，前端在 RUNNING 状态轮询时即可获取并开始填写。
+     */
+    public void setPartialResult(String taskId, PluginAutofillPlanResultVO partialResult) {
+        TaskRecord rec = tasks.get(taskId);
+        if (rec == null) {
+            return;
+        }
+        rec.setPartialResult(partialResult);
+        log.info("[autofill-task taskId={}] 部分结果已写入: assignments={}",
+                taskId, partialResult != null && partialResult.getAssignments() != null
+                        ? partialResult.getAssignments().size() : 0);
     }
 
     /**
@@ -136,6 +160,8 @@ public class PluginAutofillTaskRegistry {
         volatile String message;
         volatile int percent;
         volatile PluginAutofillPlanResultVO result;
+        /** 确定性匹配阶段产生的部分结果，前端轮询到 RUNNING + partialResult!=null 时可先行填入 */
+        volatile PluginAutofillPlanResultVO partialResult;
         volatile String errorMessage;
 
         TaskRecord(String taskId, long userId, long createdAt) {
@@ -184,6 +210,11 @@ public class PluginAutofillTaskRegistry {
             this.updatedAt = System.currentTimeMillis();
         }
 
+        synchronized void setPartialResult(PluginAutofillPlanResultVO partialResult) {
+            this.partialResult = partialResult;
+            this.updatedAt = System.currentTimeMillis();
+        }
+
         synchronized PluginAutofillTaskStatusVO toStatusVo() {
             return PluginAutofillTaskStatusVO.builder()
                     .taskId(taskId)
@@ -194,6 +225,7 @@ public class PluginAutofillTaskRegistry {
                     .createdAtEpochMs(createdAt)
                     .updatedAtEpochMs(updatedAt)
                     .result(result)
+                    .partialResult(partialResult)
                     .errorMessage(errorMessage)
                     .build();
         }

@@ -37,12 +37,21 @@ public final class PluginAutofillPrompts {
             11) JSON 字符串**语法铁律**（违反则整段无法被程序解析）：凡出现在 JSON 字符串值内的半角双引号必须写成 \", 反斜杠写成 \\, 换行写成 \\n, 回车写成 \\r, 制表写成 \\t。value、hint、userHint、i18nLabel 等字段**禁止**出现未转义的 "。若简历原文含引号，请改写为无引号短句，或改用全角「」代替半角 "，切勿在字符串中间直接插入 "。
             12) **下拉与联想框**：若 PART_B 提供 optionLabelsSample，则 value 必须是其中某项或与简历含义精确匹配的一项；若无法匹配且无法安全推断，将该控件放入 blockedFields（reason=no_mapping 或 ambiguous）并说明，不要猜选项。
             13) **PART_C 与页面块数**：PART_C 给出云简历中教育/工作/项目等模块的条数。若页面需「添加」多块才出现控件而当前 PART_B 控件不足，应在 hint 中简要提示用户先展开对应数量的块再重试；仍可对已存在的控件生成 assignments，不要虚构 selector。
-            
+            14) 本次 PART_B 可能仅包含未能通过确定性匹配的字段，已匹配字段不在列表中，请勿凭空补充不存在于 PART_B 中的 selector。
+            15) **下拉/联想框严格匹配**：当字段 interactionMode 为 combobox_typeahead 或 single_select 时：
+                - 若 optionLabelsSample 非空，value **必须**原样取自其中某一项（含大小写和全角半角），禁止缩写或改写选项文案
+                - 若没有完全匹配的选项，选语义最接近的一项，原样返回其文案
+                - 若确实无法匹配任何选项，将 value 设为空字符串，skipReason 设为 "no_matching_option"
+                - 在 fallbackValues 数组中按优先级给出 2~3 个备选文案，供前端逐个尝试
+            16) **日期格式统一**：date_picker 类字段统一输出 YYYY-MM-DD（如 2024-06-15）；仅需年月时输出 YYYY-MM，并在 userHint 标注 "year_month_only"。
+            17) **compoundSegment 语义分组**：dial_code + local_number 为一组（电话），date_start + date_end 为一组（时间区间），id_type + id_number 为一组（证件），必须在同一条 assignment 的 subAssignments 中处理，不得拆成独立 assignment。
+
             JSON 顶层字段必须为：
             - fillable: boolean
             - hint: string|null
             - assignments: 数组，元素字段：
               selector, value, order|null, confidence|null, matchType|null, skipReason|null, userHint|null,
+              fallbackValues|null (字符串数组，下拉字段备选值),
               dataFormFieldId|null, i18nLabel|null, clientFieldKey|null,
               subAssignments: [{selector,value,targetRole}] 可省略或空数组
             - blockedFields: 数组，元素字段：

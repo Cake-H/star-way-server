@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * 复合控件的一段子赋值：例如手机号「区号 + 本地号」、证件「类型 + 号码」。
  * <p>
@@ -29,4 +31,7 @@ public class PluginSubAssignmentDto {
      * 在复合字段中的语义角色，供前端选子节点写入，减少误填到同一灰框。
      */
     private String targetRole;
+
+    /** 子控件的下拉候选项样本，与主 assignment 的 optionLabelsSample 同理 */
+    private List<String> optionLabelsSample;
 }

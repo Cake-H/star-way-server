@@ -48,6 +48,14 @@ public class PluginAutofillTaskStatusVO {
     /** 最近一次状态更新时间 */
     private long updatedAtEpochMs;
 
+    /**
+     * 确定性匹配阶段产生的部分结果。
+     * 仅当 status="RUNNING" 且确定性匹配已完成时有值。
+     * 前端收到非 null 的 partialResult 可立即开始填写确定性匹配的字段，无需等待 LLM 完成。
+     * 当 status="SUCCEEDED" 时应使用 result（完整结果），忽略 partialResult。
+     */
+    private PluginAutofillPlanResultVO partialResult;
+
     /** 仅当 status=SUCCEEDED 时有值，结构与同步 {@code /autofill-plan} 的 data 一致 */
     private PluginAutofillPlanResultVO result;
 
