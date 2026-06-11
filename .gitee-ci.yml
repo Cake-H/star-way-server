@@ -63,26 +63,9 @@ variables:
 
 # ==================== 流水线 ====================
 stages:
-  # ==================== Stage 1: 编译 ====================
-  - name: build
-    displayName: Maven 编译打包
-    jobs:
-      - name: maven-build
-        displayName: 编译 & 单元测试
-        # ★ image 必须放在 job 级别，step 级别会被 Gitee Go 内置 Java 插件覆盖
-        image: maven:3.9-eclipse-temurin-17-alpine
-        steps:
-          - name: build
-            displayName: Maven package（JDK 17）
-            commands:
-              - java -version
-              - mvn package -DskipTests=true -B -q
-            timeout: 600
-
-  # ==================== Stage 2: Docker 镜像构建 & 推送 ====================
+  # ==================== Stage 1: Docker 镜像构建 & 推送 ====================
   - name: docker
     displayName: Docker 镜像构建 & 推送
-    needs: build
     jobs:
       - name: docker-app
         displayName: ida-app-server 镜像
