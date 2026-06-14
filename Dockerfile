@@ -7,7 +7,7 @@
 # ============================================================
 
 # ---------- Stage 1: 编译 ----------
-FROM maven:3.9-eclipse-temurin-17-alpine AS builder
+FROM crpi-57bx5zcp97h0pj85.cn-guangzhou.personal.cr.aliyuncs.com/cakeh/maven:3.9-eclipse-temurin-17-alpine AS builder
 
 ARG MODULE=ida-app-server
 
@@ -32,7 +32,7 @@ COPY . .
 RUN mvn package -pl ${MODULE} -am -DskipTests -B -q
 
 # ---------- Stage 2: 运行 ----------
-FROM registry.cn-hangzhou.aliyuncs.com/acs/openjdk:17-jdk-alpine
+FROM crpi-57bx5zcp97h0pj85.cn-guangzhou.personal.cr.aliyuncs.com/cakeh/eclipse-temurin:17-jre-alpine
 
 ARG MODULE=ida-app-server
 
