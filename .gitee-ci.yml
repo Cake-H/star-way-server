@@ -1,98 +1,105 @@
 version: '1.0'
 name: ida-cicd
+displayName: ida-cicd
 
 triggers:
   trigger: auto
   push:
     branches:
-      - main
+      include:
+        - main
 
 stages:
-  # ==================== Docker 构建 ====================
+  # ==================== Docker 镜像构建 & 推送 ====================
   - name: docker-build
-    displayName: Docker 镜像构建
+    displayName: Docker 镜像构建 & 推送
     strategy: naturally
     trigger: auto
     steps:
-      - name: login-acr
-        displayName: 登录阿里云 ACR
-        image: docker:24-cli
-        commands:
-          - echo "${ACR_PASSWORD}" | docker login -u "${ACR_USERNAME}" --password-stdin "${ACR_REGISTRY}"
+      # ---------- ida-app-server ----------
+      - step: build@docker
+        name: build_app
+        displayName: 构建 & 推送 ida-app-server
+        type: cert
+        certificate: acr-credential
+        tag: ida-app-server:${GITEE_COMMIT_SHORT}
+        dockerfile: ./Dockerfile
+        context: .
+        isCache: false
+        processorType:
+          - amd64
+        parameter:
+          MODULE: ida-app-server
+        strategy:
+          retry: '0'
 
-      - name: build-app
-        displayName: 构建 ida-app-server 镜像
-        image: docker:24-cli
-        commands:
-          - docker build --build-arg MODULE=ida-app-server -t ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-app-server:${GITEE_COMMIT_SHORT} -t ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-app-server:latest .
-        timeout: 900
+      - step: build@docker
+        name: tag_app_latest
+        displayName: 推送 app-server latest
+        type: cert
+        certificate: acr-credential
+        tag: ida-app-server:latest
+        dockerfile: ./Dockerfile
+        context: .
+        isCache: true
+        processorType:
+          - amd64
+        parameter:
+          MODULE: ida-app-server
+        strategy:
+          retry: '0'
 
-      - name: push-app
-        displayName: 推送 app-server 镜像
-        image: docker:24-cli
-        commands:
-          - docker push ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-app-server:${GITEE_COMMIT_SHORT}
-          - docker push ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-app-server:latest
+      # ---------- ida-plugin-server ----------
+      - step: build@docker
+        name: build_plugin
+        displayName: 构建 & 推送 ida-plugin-server
+        type: cert
+        certificate: acr-credential
+        tag: ida-plugin-server:${GITEE_COMMIT_SHORT}
+        dockerfile: ./Dockerfile
+        context: .
+        isCache: false
+        processorType:
+          - amd64
+        parameter:
+          MODULE: ida-plugin-server
+        strategy:
+          retry: '0'
 
-      - name: build-plugin
-        displayName: 构建 ida-plugin-server 镜像
-        image: docker:24-cli
-        commands:
-          - docker build --build-arg MODULE=ida-plugin-server -t ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-plugin-server:${GITEE_COMMIT_SHORT} -t ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-plugin-server:latest .
-        timeout: 900
+      - step: build@docker
+        name: tag_plugin_latest
+        displayName: 推送 plugin-server latest
+        type: cert
+        certificate: acr-credential
+        tag: ida-plugin-server:latest
+        dockerfile: ./Dockerfile
+        context: .
+        isCache: true
+        processorType:
+          - amd64
+        parameter:
+          MODULE: ida-plugin-server
+        strategy:
+          retry: '0'
 
-      - name: push-plugin
-        displayName: 推送 plugin-server 镜像
-        image: docker:24-cli
-        commands:
-          - docker push ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-plugin-server:${GITEE_COMMIT_SHORT}
-          - docker push ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-plugin-server:latest
-
-  # ==================== SSH 部署 ====================
+  # ==================== SSH 远程部署 ====================
   - name: deploy
     displayName: SSH 远程部署
     strategy: naturally
     trigger: auto
     steps:
-      - name: deploy
-        displayName: 部署到服务器
-        image: alpine:3.20
-        commands:
-          - |
-            apk add --no-cache openssh-client
-            mkdir -p ~/.ssh && chmod 700 ~/.ssh
-            echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
-            chmod 600 ~/.ssh/id_rsa
-            ssh-keyscan -p ${SSH_PORT:-22} ${SSH_HOST} >> ~/.ssh/known_hosts
-            ssh -p ${SSH_PORT:-22} ${SSH_USER}@${SSH_HOST} << 'DEPLOY_SCRIPT'
-            set -e
-            echo "${ACR_PASSWORD}" | docker login -u "${ACR_USERNAME}" --password-stdin "${ACR_REGISTRY}"
-            cd ${DEPLOY_DIR:-/opt/ida}
-            docker pull ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-app-server:latest
-            docker pull ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-plugin-server:latest
-            cat > .env << 'ENVEOF'
-            SPRING_PROFILES_ACTIVE=prod
-            MYSQL_HOST=${MYSQL_HOST}
-            MYSQL_PORT=${MYSQL_PORT:-3306}
-            MYSQL_DATABASE=${MYSQL_DATABASE}
-            MYSQL_USER=${MYSQL_USER}
-            MYSQL_PASSWORD=${MYSQL_PASSWORD}
-            IDA_REDIS_HOST=${IDA_REDIS_HOST}
-            IDA_REDIS_PORT=${IDA_REDIS_PORT:-6379}
-            IDA_REDIS_PASSWORD=${IDA_REDIS_PASSWORD}
-            IDA_ACCESS_HOST=${IDA_ACCESS_HOST}
-            ALIBABA_ACCESS_KEY_ID=${ALIBABA_ACCESS_KEY_ID}
-            ALIBABA_ACCESS_KEY_SECRET=${ALIBABA_ACCESS_KEY_SECRET}
-            ALIYUN_OSS_ENDPOINT=${ALIYUN_OSS_ENDPOINT}
-            ALIYUN_OSS_BUCKET=${ALIYUN_OSS_BUCKET}
-            ALIYUN_OSS_PUBLIC_BASE_URL=${ALIYUN_OSS_PUBLIC_BASE_URL}
-            ALIYUN_NLS_APP_KEY=${ALIYUN_NLS_APP_KEY}
-            ARK_API_KEY_DEEPSEEK=${ARK_API_KEY_DEEPSEEK}
-            ARK_API_KEY=${ARK_API_KEY}
-            ENVEOF
-            docker compose up -d --remove-orphans
-            docker image prune -af --filter "until=72h"
-            echo "===== 部署完成 ====="
-            docker compose ps
-            DEPLOY_SCRIPT
-        timeout: 300
+      - step: deploy@agent
+        name: deploy_server
+        displayName: 部署到生产服务器
+        hostGroupID: ida-server-group
+        script:
+          - echo "${ACR_PASSWORD}" | docker login -u "${ACR_USERNAME}" --password-stdin "${ACR_REGISTRY}"
+          - cd ${DEPLOY_DIR:-/opt/ida}
+          - docker pull ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-app-server:latest
+          - docker pull ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-plugin-server:latest
+          - docker compose up -d --remove-orphans
+          - docker image prune -af --filter "until=72h"
+          - docker compose ps
+        notify: []
+        strategy:
+          retry: '0'
