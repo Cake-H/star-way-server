@@ -1,0 +1,100 @@
+version: '1.0'
+name: ida-cicd
+displayName: ida-cicd
+triggers:
+  trigger: auto
+  push:
+    branches:
+      include:
+        - main
+stages:
+  - name: docker-build
+    displayName: Docker 镜像构建 & 推送
+    strategy: naturally
+    trigger: auto
+    steps:
+      - step: build@docker
+        name: build_app
+        displayName: 构建 & 推送 ida-app-server
+        type: cert
+        certificate: acr-credential
+        tag: ida-app-server:${GITEE_COMMIT_SHORT}
+        dockerfile: ./Dockerfile
+        context: .
+        isCache: false
+        processorType:
+          - amd64
+        parameter:
+          MODULE: ida-app-server
+        strategy:
+          retry: '0'
+      - step: build@docker
+        name: tag_app_latest
+        displayName: 推送 app-server latest
+        type: cert
+        certificate: acr-credential
+        tag: ida-app-server:latest
+        dockerfile: ./Dockerfile
+        context: .
+        isCache: true
+        processorType:
+          - amd64
+        parameter:
+          MODULE: ida-app-server
+        strategy:
+          retry: '0'
+      - step: build@docker
+        name: build_plugin
+        displayName: 构建 & 推送 ida-plugin-server
+        type: cert
+        certificate: acr-credential
+        tag: ida-plugin-server:${GITEE_COMMIT_SHORT}
+        dockerfile: ./Dockerfile
+        context: .
+        isCache: false
+        processorType:
+          - amd64
+        parameter:
+          MODULE: ida-plugin-server
+        strategy:
+          retry: '0'
+      - step: build@docker
+        name: tag_plugin_latest
+        displayName: 推送 plugin-server latest
+        type: cert
+        certificate: acr-credential
+        tag: ida-plugin-server:latest
+        dockerfile: ./Dockerfile
+        context: .
+        isCache: true
+        processorType:
+          - amd64
+        parameter:
+          MODULE: ida-plugin-server
+        strategy:
+          retry: '0'
+  - name: deploy
+    displayName: SSH 远程部署
+    strategy: naturally
+    trigger: auto
+    steps:
+      - step: deploy@agent
+        name: deploy_server
+        displayName: 部署到生产服务器
+        hostGroupID: ida-server-group
+        deployArtifact:
+          - name: ida-app-server
+            target: /opt/ida/
+            source: build
+            dependArtifact: output
+        script:
+          - echo "${ACR_PASSWORD}" | docker login -u "${ACR_USERNAME}" --password-stdin "${ACR_REGISTRY}"
+          - cd ${DEPLOY_DIR:-/opt/ida}
+          - docker pull ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-app-server:latest
+          - docker pull ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-plugin-server:latest
+          - docker compose up -d --remove-orphans
+          - docker image prune -af --filter "until=72h"
+          - docker compose ps
+        notify: []
+        strategy:
+          retry: '0'
