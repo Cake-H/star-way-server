@@ -32,7 +32,7 @@ stages:
         name: tag_app_latest
         displayName: 推送 app-server latest
         type: cert
-        certificate: acr-credential
+        certificate: crpi-57bx5zcp97h0pj85
         tag: ida-app-server:latest
         dockerfile: ./Dockerfile
         context: .
@@ -45,9 +45,9 @@ stages:
           retry: '0'
       - step: build@docker
         name: build_plugin
-        displayName: 构建 & 推送 ida-plugin-server
+        displayName: 构建 推送 ida-plugin-server
         type: cert
-        certificate: acr-credential
+        certificate: crpi-57bx5zcp97h0pj85
         tag: ida-plugin-server:${GITEE_COMMIT_SHORT}
         dockerfile: ./Dockerfile
         context: .
@@ -62,7 +62,7 @@ stages:
         name: tag_plugin_latest
         displayName: 推送 plugin-server latest
         type: cert
-        certificate: acr-credential
+        certificate: crpi-57bx5zcp97h0pj85
         tag: ida-plugin-server:latest
         dockerfile: ./Dockerfile
         context: .
