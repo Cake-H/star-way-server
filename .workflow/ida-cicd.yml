@@ -15,9 +15,9 @@ stages:
     steps:
       - step: build@docker
         name: build_app
-        displayName: 构建 & 推送 ida-app-server
+        displayName: 构建 推送 ida-app-server
         type: cert
-        certificate: acr-credential
+        certificate: crpi-57bx5zcp97h0pj85
         tag: ida-app-server:${GITEE_COMMIT_SHORT}
         dockerfile: ./Dockerfile
         context: .
