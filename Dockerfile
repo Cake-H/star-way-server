@@ -32,7 +32,7 @@ COPY . .
 RUN mvn package -pl ${MODULE} -am -DskipTests -B -q
 
 # ---------- Stage 2: 运行 ----------
-FROM registry.cn-hangzhou.aliyuncs.com/imi4cloud/eclipse-temurin:17-jre-alpine
+FROM openjdk:17-jdk-slim
 
 ARG MODULE=ida-app-server
 
