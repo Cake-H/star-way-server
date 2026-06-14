@@ -32,7 +32,7 @@ COPY . .
 RUN mvn package -pl ${MODULE} -am -DskipTests -B -q
 
 # ---------- Stage 2: 运行 ----------
-FROM openjdk:17-jdk-slim
+FROM registry.cn-hangzhou.aliyuncs.com/acs/openjdk:17-jdk-alpine
 
 ARG MODULE=ida-app-server
 
