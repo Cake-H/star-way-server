@@ -12,16 +12,16 @@ triggers:
 stages:
   # ==================== Docker 镜像构建 & 推送 ====================
   - name: docker-build
-    displayName: Docker 镜像构建 & 推送
+    displayName: Docker 镜像构建 推送
     strategy: naturally
     trigger: auto
     steps:
       # ---------- ida-app-server ----------
       - step: build@docker
         name: build_app
-        displayName: 构建 & 推送 ida-app-server
+        displayName: 构建 推送 ida-app-server
         type: cert
-        certificate: acr-credential
+        certificate: ida_docker凭证
         tag: ida-app-server:${GITEE_COMMIT_SHORT}
         dockerfile: ./Dockerfile
         context: .
@@ -37,7 +37,7 @@ stages:
         name: tag_app_latest
         displayName: 推送 app-server latest
         type: cert
-        certificate: acr-credential
+        certificate: ida_docker凭证
         tag: ida-app-server:latest
         dockerfile: ./Dockerfile
         context: .
@@ -52,9 +52,9 @@ stages:
       # ---------- ida-plugin-server ----------
       - step: build@docker
         name: build_plugin
-        displayName: 构建 & 推送 ida-plugin-server
+        displayName: 构建 推送 ida-plugin-server
         type: cert
-        certificate: acr-credential
+        certificate: ida_docker凭证
         tag: ida-plugin-server:${GITEE_COMMIT_SHORT}
         dockerfile: ./Dockerfile
         context: .
@@ -70,7 +70,7 @@ stages:
         name: tag_plugin_latest
         displayName: 推送 plugin-server latest
         type: cert
-        certificate: acr-credential
+        certificate: ida_docker凭证
         tag: ida-plugin-server:latest
         dockerfile: ./Dockerfile
         context: .
