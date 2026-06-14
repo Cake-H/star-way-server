@@ -9,7 +9,7 @@ triggers:
         - main
 stages:
   - name: docker-build
-    displayName: Docker 镜像构建 & 推送
+    displayName: Docker 镜像构建 推送
     strategy: naturally
     trigger: auto
     steps:
@@ -17,8 +17,8 @@ stages:
         name: build_app
         displayName: 构建 推送 ida-app-server
         type: cert
-        certificate: crpi-57bx5zcp97h0pj85
-        tag: ida-app-server:${GITEE_COMMIT_SHORT}
+        certificate: ida_docker
+        tag: cakeh/ida-app-server:${GITEE_COMMIT_SHORT}
         dockerfile: ./Dockerfile
         context: .
         isCache: false
@@ -32,8 +32,8 @@ stages:
         name: tag_app_latest
         displayName: 推送 app-server latest
         type: cert
-        certificate: crpi-57bx5zcp97h0pj85
-        tag: ida-app-server:latest
+        certificate: ida_docker
+        tag: cakeh/ida-app-server:latest
         dockerfile: ./Dockerfile
         context: .
         isCache: true
@@ -47,8 +47,8 @@ stages:
         name: build_plugin
         displayName: 构建 推送 ida-plugin-server
         type: cert
-        certificate: crpi-57bx5zcp97h0pj85
-        tag: ida-plugin-server:${GITEE_COMMIT_SHORT}
+        certificate: ida_docker
+        tag: cakeh/ida-plugin-server:${GITEE_COMMIT_SHORT}
         dockerfile: ./Dockerfile
         context: .
         isCache: false
@@ -62,8 +62,8 @@ stages:
         name: tag_plugin_latest
         displayName: 推送 plugin-server latest
         type: cert
-        certificate: crpi-57bx5zcp97h0pj85
-        tag: ida-plugin-server:latest
+        certificate: ida_docker
+        tag: cakeh/ida-plugin-server:latest
         dockerfile: ./Dockerfile
         context: .
         isCache: true
@@ -84,7 +84,7 @@ stages:
         hostGroupID: ida-server-group
         deployArtifact:
           - name: ida-app-server
-            target: /opt/ida/
+            target: /opt/ida
             source: build
             dependArtifact: output
         script:
