@@ -17,7 +17,7 @@ stages:
         name: build_app
         displayName: 构建 推送 ida-app-server
         type: cert
-        certificate: ida_docker
+        certificate: crpi-57bx5zcp97h0pj85
         tag: cakeh/ida-app-server:${GITEE_COMMIT_SHORT}
         dockerfile: ./Dockerfile
         context: .
@@ -32,7 +32,7 @@ stages:
         name: tag_app_latest
         displayName: 推送 app-server latest
         type: cert
-        certificate: ida_docker
+        certificate: crpi-57bx5zcp97h0pj85
         tag: cakeh/ida-app-server:latest
         dockerfile: ./Dockerfile
         context: .
@@ -47,7 +47,7 @@ stages:
         name: build_plugin
         displayName: 构建 推送 ida-plugin-server
         type: cert
-        certificate: ida_docker
+        certificate: crpi-57bx5zcp97h0pj85
         tag: cakeh/ida-plugin-server:${GITEE_COMMIT_SHORT}
         dockerfile: ./Dockerfile
         context: .
@@ -62,7 +62,7 @@ stages:
         name: tag_plugin_latest
         displayName: 推送 plugin-server latest
         type: cert
-        certificate: ida_docker
+        certificate: crpi-57bx5zcp97h0pj85
         tag: cakeh/ida-plugin-server:latest
         dockerfile: ./Dockerfile
         context: .
@@ -81,10 +81,13 @@ stages:
       - step: deploy@agent
         name: deploy_server
         displayName: 部署到生产服务器
-        hostGroupID: ida-server-group
+        hostGroupID:
+          ID: ida-server-group
+          hostID:
+            - 3f44762d-cb06-4ece-83e1-8bb8044ac0ea
         deployArtifact:
           - name: ida-app-server
-            target: /opt/ida
+            target: /opt/ida/
             source: build
             dependArtifact: output
         script:
