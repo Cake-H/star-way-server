@@ -18,7 +18,7 @@ stages:
         displayName: 构建 推送 ida-app-server
         type: cert
         certificate: crpi-57bx5zcp97h0pj85
-        tag: cakeh/ida-app-server:${GITEE_COMMIT_SHORT}
+        tag: cakeh/ida-app-server:${GITEE_SHORT_COMMIT}
         dockerfile: ./Dockerfile
         context: .
         isCache: false
@@ -48,7 +48,7 @@ stages:
         displayName: 构建 推送 ida-plugin-server
         type: cert
         certificate: crpi-57bx5zcp97h0pj85
-        tag: cakeh/ida-plugin-server:${GITEE_COMMIT_SHORT}
+        tag: cakeh/ida-plugin-server:${GITEE_SHORT_COMMIT}
         dockerfile: ./Dockerfile
         context: .
         isCache: false
