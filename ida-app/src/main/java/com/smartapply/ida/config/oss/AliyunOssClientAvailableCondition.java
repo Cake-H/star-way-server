@@ -17,13 +17,27 @@ public class AliyunOssClientAvailableCondition implements Condition {
     @Override
     public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
         Environment env = context.getEnvironment();
-        String enabled = env.getProperty(PREFIX + "enabled");
-        if (!"true".equalsIgnoreCase(enabled != null ? enabled.trim() : "")) {
+        try {
+            String enabled = env.getProperty(PREFIX + "enabled");
+            System.out.println("[OSS-Condition] enabled=" + enabled);
+            if (!"true".equalsIgnoreCase(enabled != null ? enabled.trim() : "")) {
+                System.out.println("[OSS-Condition] enabled is not true → skip");
+                return false;
+            }
+            String ep = env.getProperty(PREFIX + "endpoint");
+            String ak = env.getProperty(PREFIX + "access-key-id");
+            String sk = env.getProperty(PREFIX + "access-key-secret");
+            String bk = env.getProperty(PREFIX + "bucket");
+            System.out.println("[OSS-Condition] endpoint=" + ep + " ak=" + (ak != null ? "***" : "null") + " sk=" + (sk != null ? "***" : "null") + " bucket=" + bk);
+            boolean ok = org.springframework.util.StringUtils.hasText(ep)
+                    && org.springframework.util.StringUtils.hasText(ak)
+                    && org.springframework.util.StringUtils.hasText(sk)
+                    && org.springframework.util.StringUtils.hasText(bk);
+            System.out.println("[OSS-Condition] result=" + ok);
+            return ok;
+        } catch (Exception e) {
+            System.out.println("[OSS-Condition] EXCEPTION: " + e.getClass().getName() + ": " + e.getMessage());
             return false;
         }
-        return StringUtils.hasText(env.getProperty(PREFIX + "endpoint"))
-                && StringUtils.hasText(env.getProperty(PREFIX + "access-key-id"))
-                && StringUtils.hasText(env.getProperty(PREFIX + "access-key-secret"))
-                && StringUtils.hasText(env.getProperty(PREFIX + "bucket"));
     }
 }

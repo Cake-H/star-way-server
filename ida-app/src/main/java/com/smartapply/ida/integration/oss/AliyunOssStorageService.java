@@ -26,6 +26,11 @@ public class AliyunOssStorageService {
     private final OSS oss;
     private final AliyunOssProperties properties;
 
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        System.out.println("[OSS-Service] AliyunOssStorageService Bean 已创建, endpoint=" + properties.getEndpoint() + " bucket=" + properties.getBucket());
+    }
+
     /**
      * 通用上传：对象键由调用方指定（建议不含前导 {@code /}）。
      */

@@ -55,12 +55,12 @@ ida:
       endpoint: dypnsapi.aliyuncs.com
     oss:
       enabled: ${ALIYUN_OSS_ENABLED:true}
-      endpoint: ${ALIYUN_OSS_ENDPOINT}
-      access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID}
-      access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET}
-      bucket: ${ALIYUN_OSS_BUCKET}
+      endpoint: ${ALIYUN_OSS_ENDPOINT:}
+      access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
+      access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+      bucket: ${ALIYUN_OSS_BUCKET:}
       key-prefix: app/resume/
-      public-base-url: ${ALIYUN_OSS_PUBLIC_BASE_URL}
+      public-base-url: ${ALIYUN_OSS_PUBLIC_BASE_URL:}
 
 logging:
   level:

@@ -41,7 +41,7 @@ stages:
         tag: cakeh/ida-app-server:latest
         dockerfile: ./Dockerfile
         context: .
-        isCache: true
+        isCache: false
         processorType:
           - amd64
         parameter:
@@ -74,7 +74,7 @@ stages:
         tag: cakeh/ida-plugin-server:latest
         dockerfile: ./Dockerfile
         context: .
-        isCache: true
+        isCache: false
         processorType:
           - amd64
         parameter:
