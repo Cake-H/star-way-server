@@ -7,6 +7,7 @@ import com.smartapply.ida.constant.ApiRouteConstants;
 import com.smartapply.ida.http.annotation.RequestUserId;
 import com.smartapply.ida.module.app.interview.service.AppInterviewService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ import java.util.List;
 @Slf4j
 @Validated
 @RequiredArgsConstructor
+@SecurityRequirement(name = "Bearer")
 public class AppInterviewController {
 
     private final AppInterviewService appInterviewService;

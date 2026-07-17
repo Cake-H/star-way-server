@@ -1,0 +1,33 @@
+{
+  "siteId": "_REPLACE_WITH_SITE_ID_",
+  "displayName": "站点展示名",
+  "priority": 100,
+  "fingerprints": [
+    {
+      "urlHostSuffix": "example.com",
+      "urlPathRegex": ".*/apply/.*",
+      "fieldAnchorHint": {
+        "dataFormFieldIdPrefix": "ats-"
+      },
+      "minFieldAnchorHits": 1
+    }
+  ],
+  "fieldMappings": [
+    {
+      "anchor": { "labelTextEquals": "姓名" },
+      "resumePath": "basic.fullName"
+    },
+    {
+      "anchor": { "labelTextEquals": "手机号" },
+      "resumePath": "basic.phone"
+    },
+    {
+      "anchor": { "labelTextEquals": "学历", "enumCategory": "degree" },
+      "resumePath": "education.0.degree"
+    },
+    {
+      "anchor": { "selectorContains": "upload", "labelTextEquals": "附件" },
+      "skip": true
+    }
+  ]
+}

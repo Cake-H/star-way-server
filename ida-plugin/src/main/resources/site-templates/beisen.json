@@ -1,0 +1,87 @@
+{
+  "siteId": "beisen_campus",
+  "displayName": "北森校招（示例模板，需用真实数据校准）",
+  "priority": 100,
+  "fingerprints": [
+    {
+      "urlHostSuffix": "beisen.com"
+    },
+    {
+      "urlHostSuffix": "yingjiesheng.com"
+    }
+  ],
+  "fieldMappings": [
+    {
+      "anchor": { "labelTextEquals": "姓名" },
+      "resumePath": "basic.fullName"
+    },
+    {
+      "anchor": { "labelTextEquals": "手机号" },
+      "resumePath": "basic.phone"
+    },
+    {
+      "anchor": { "labelTextEquals": "邮箱" },
+      "resumePath": "basic.email"
+    },
+    {
+      "anchor": { "labelTextEquals": "性别", "i18nLabelEquals": "gender" },
+      "resumePath": "basic.gender",
+      "enumCategory": "gender"
+    },
+    {
+      "anchor": { "labelTextEquals": "出生日期" },
+      "resumePath": "basic.birthDate"
+    },
+    {
+      "anchor": { "labelTextEquals": "证件类型" },
+      "resumePath": "basic.idDocType",
+      "enumCategory": "idDocType"
+    },
+    {
+      "anchor": { "labelTextEquals": "证件号码" },
+      "resumePath": "basic.idDocNumber"
+    },
+    {
+      "anchor": { "labelTextEquals": "政治面貌" },
+      "resumePath": "location.politicalStatus",
+      "enumCategory": "politicalStatus"
+    },
+    {
+      "anchor": { "labelTextEquals": "籍贯" },
+      "resumePath": "location.nativePlace"
+    },
+    {
+      "anchor": { "labelTextEquals": "学校" },
+      "resumePath": "education.0.schoolName"
+    },
+    {
+      "anchor": { "labelTextEquals": "专业" },
+      "resumePath": "education.0.major"
+    },
+    {
+      "anchor": { "labelTextEquals": "学历" },
+      "resumePath": "education.0.degree",
+      "enumCategory": "degree"
+    },
+    {
+      "anchor": { "labelTextEquals": "入学时间" },
+      "resumePath": "education.0.enrollDate"
+    },
+    {
+      "anchor": { "labelTextEquals": "毕业时间" },
+      "resumePath": "education.0.graduateDate"
+    },
+    {
+      "anchor": { "labelTextEquals": "公司名称" },
+      "resumePath": "work.0.companyName"
+    },
+    {
+      "anchor": { "labelTextEquals": "职位" },
+      "resumePath": "work.0.jobTitle"
+    },
+    {
+      "anchor": { "labelTextEquals": "附件", "selectorContains": "upload" },
+      "skip": true
+    }
+  ]
+}

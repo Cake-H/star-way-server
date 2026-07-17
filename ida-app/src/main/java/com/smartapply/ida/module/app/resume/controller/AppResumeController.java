@@ -13,6 +13,7 @@ import com.smartapply.ida.module.app.resume.service.AppResumeDraftService;
 import com.smartapply.ida.module.app.resume.service.AppResumeQueryService;
 import com.smartapply.ida.module.app.resume.service.AppResumeUploadParseService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,6 +53,7 @@ import java.util.List;
 @RequestMapping(ApiRouteConstants.API_V1_APP + "/resume")
 @Slf4j
 @RequiredArgsConstructor
+@SecurityRequirement(name = "Bearer")
 public class AppResumeController {
 
     private final AppResumeUploadParseService appResumeUploadParseService;

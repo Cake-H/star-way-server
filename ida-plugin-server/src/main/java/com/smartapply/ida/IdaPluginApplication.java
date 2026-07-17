@@ -11,12 +11,14 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.core.env.Environment;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 浏览器扩展 — 独立 Spring Boot 进程（默认端口 {@code 8089}）。
  */
 @SpringBootApplication
 @ConfigurationPropertiesScan(basePackages = "com.smartapply.ida.config.props")
+@EnableScheduling
 @MapperScan(value = "com.smartapply.ida", annotationClass = Mapper.class)
 @ComponentScan(
         basePackages = "com.smartapply.ida",

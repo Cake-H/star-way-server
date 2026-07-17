@@ -1,6 +1,7 @@
 package com.smartapply.ida.ai.langchain4j.config;
 
 import com.smartapply.ida.ai.langchain4j.assistant.InterviewSummarizeAssistant;
+import com.smartapply.ida.ai.langchain4j.assistant.MockInterviewGenerateAssistant;
 import com.smartapply.ida.ai.langchain4j.assistant.PluginAutofillAssistant;
 import com.smartapply.ida.ai.langchain4j.assistant.ResumeParseAssistant;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -49,6 +50,12 @@ public class LangChain4jAutoConfiguration {
         return buildChatModel(properties.getInterviewSummarize(), "面试总结");
     }
 
+    @Bean("mockInterviewChatModel")
+    @ConditionalOnMissingBean(name = "mockInterviewChatModel")
+    public OpenAiChatModel mockInterviewChatModel() {
+        return buildChatModel(properties.getMockInterview(), "模拟面试题目生成");
+    }
+
     // ==================== AI Service Beans ====================
 
     @Bean
@@ -81,13 +88,23 @@ public class LangChain4jAutoConfiguration {
                 .build();
     }
 
+    @Bean
+    @ConditionalOnMissingBean
+    public MockInterviewGenerateAssistant mockInterviewGenerateAssistant(
+            @Qualifier("mockInterviewChatModel") OpenAiChatModel chatModel) {
+        log.info("[LangChain4j] 创建 MockInterviewGenerateAssistant");
+        return AiServices.builder(MockInterviewGenerateAssistant.class)
+                .chatLanguageModel(chatModel)
+                .build();
+    }
+
     // ==================== Private Methods ====================
 
     private OpenAiChatModel buildChatModel(LangChain4jProperties.ModelConfig config, String sceneName) {
         String apiKey = properties.resolveApiKey();
         if (apiKey == null || apiKey.isBlank()) {
             log.warn("[LangChain4j] {} 未配置 API Key，请设置环境变量 {}",
-                sceneName, properties.getEnvApiKeyName());
+                    sceneName, properties.getEnvApiKeyName());
         }
 
         OpenAiChatModel.OpenAiChatModelBuilder builder = OpenAiChatModel.builder()
@@ -106,7 +123,7 @@ public class LangChain4jAutoConfiguration {
         }
 
         log.info("[LangChain4j] 已创建 {} ChatModel: baseUrl={}, model={}, temperature={}",
-            sceneName, properties.getBaseUrl(), config.getModel(), config.getTemperature());
+                sceneName, properties.getBaseUrl(), config.getModel(), config.getTemperature());
 
         return builder.build();
     }

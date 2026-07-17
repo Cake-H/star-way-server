@@ -26,6 +26,13 @@ public class PluginAutofillPlanResultVO {
     @JsonAlias({"Fillable"})
     private boolean fillable;
 
+    /**
+     * 命中的站点模板 id（未命中模板为 null）。前端在反馈接口中原样透传，用于统计模板命中率。
+     *
+     * @see com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillFeedbackRequest#getSiteId()
+     */
+    private String siteId;
+
     /** 不可填或需用户注意时的说明（中文） */
     private String hint;
 

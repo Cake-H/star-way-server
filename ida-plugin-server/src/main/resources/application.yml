@@ -99,3 +99,9 @@ ida:
       max-tokens: 8192
       read-timeout-ms: 120000
       response-format-json-object: true
+    mock-interview:
+      model: deepseek-v4-flash
+      temperature: 0.4
+      max-tokens: 8192
+      read-timeout-ms: 300000
+      response-format-json-object: true

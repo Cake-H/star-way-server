@@ -14,8 +14,9 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 15MB
-      max-request-size: 16MB
+      # 面试语音总结允许上传 30 MB 以内的录音文件
+      max-file-size: 30MB
+      max-request-size: 35MB
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
@@ -96,6 +97,12 @@ ida:
       temperature: 0.3
       max-tokens: 8192
       read-timeout-ms: 120000
+      response-format-json-object: true
+    mock-interview:
+      model: deepseek-v4-flash
+      temperature: 0.4
+      max-tokens: 8192
+      read-timeout-ms: 300000
       response-format-json-object: true
 
   # 语音识别 — 公共参数（凭证在 application-{dev|prod}.yml 中覆盖）

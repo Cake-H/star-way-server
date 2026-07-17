@@ -27,6 +27,12 @@ public class PluginAutofillFeedbackRequest {
     /** 填写发生的页面 URL */
     private String pageUrl;
 
+    /**
+     * 命中的站点模板 id，前端从填表计划结果 {@code PluginAutofillPlanResultVO.siteId} 透传。
+     * 可空；用于反馈统计中关联模板命中率。
+     */
+    private String siteId;
+
     /** 各字段的实际填写状态 */
     @Valid
     private List<FieldFeedbackItem> fields;

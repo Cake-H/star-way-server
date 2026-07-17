@@ -6,8 +6,12 @@ import com.smartapply.ida.ai.langchain4j.assistant.PluginAutofillAssistant;
 import com.smartapply.ida.ai.langchain4j.prompt.PluginAutofillPromptProvider;
 import com.smartapply.ida.ai.plugin.deterministic.DeterministicFieldMatcher;
 import com.smartapply.ida.ai.plugin.deterministic.DeterministicMatchResult;
+import com.smartapply.ida.ai.plugin.site.SiteTemplateMatcher;
+import com.smartapply.ida.ai.plugin.site.SiteTemplateRegistry;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanRequest;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanResultVO;
+import com.smartapply.ida.common.domain.plugin.autofill.site.SiteTemplate;
+import com.smartapply.ida.common.domain.plugin.autofill.site.SiteTemplateMatchResult;
 import com.smartapply.ida.common.domain.plugin.autofill.task.PluginAutofillProgressPhase;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginBlockedFieldDto;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginFieldAssignmentDto;
@@ -59,6 +63,10 @@ public class PluginFormAutofillAiService {
     private final AppResumeQueryService appResumeQueryService;
     /** 确定性字段匹配器：clientFieldKey 直接映射 + 标签启发式，覆盖 ~80% 常见字段 */
     private final DeterministicFieldMatcher deterministicFieldMatcher;
+    /** 站点模板注册表：按 URL/锚点指纹匹配已标注的 ATS 模板，命中即走金标直填 */
+    private final SiteTemplateRegistry siteTemplateRegistry;
+    /** 站点模板匹配器：对命中的模板逐字段执行金标映射，产出高置信 assignment */
+    private final SiteTemplateMatcher siteTemplateMatcher;
     /** 结果缓存：相同用户+简历+页面结构 → 命中缓存跳过 LLM */
     private final PluginAutofillResultCacheService resultCacheService;
     /** 简历预加载缓存：优先从 Redis 读取，miss 再查 DB */
@@ -74,12 +82,13 @@ public class PluginFormAutofillAiService {
     /**
      * 生成填表计划并在关键步骤回调 {@code progress}。
      * <p>
-     * <b>两阶段交付流程：</b>
+     * <b>三阶段降级链：</b>
      * <ol>
-     *   <li>确定性匹配（clientFieldKey 直接映射 + 标签启发式）—— ~80% 字段，< 1s 完成，通过 partialResult 推送前端</li>
-     *   <li>LLM 推理（仅处理未匹配的 ~20% 字段）—— prompt 体积大幅缩减，推理更快</li>
+     *   <li>站点模板匹配（命中 ATS 模板即金标直填）—— 毫秒级、~100% 准确，优先级最高</li>
+     *   <li>确定性匹配（clientFieldKey 直接映射 + 标签启发式）—— ~80% 字段，< 1s 完成</li>
+     *   <li>LLM 推理（仅处理仍未匹配的字段）—— prompt 体积大幅缩减，推理更快</li>
      * </ol>
-     * 前端在 RUNNING 状态轮询到 partialResult 时可立即开始填写，无需等待 LLM 返回。
+     * 每阶段产出的 assignment 通过 partialResult 推送前端，RUNNING 状态轮询到即可立即开始填写，无需等待 LLM 返回。
      */
     public PluginAutofillPlanResultVO planAutofill(long userId, PluginAutofillPlanRequest req, PluginAutofillProgressSink progress) {
         PluginAutofillProgressSink p = progress != null ? progress : PluginAutofillProgressSink.noop();
@@ -128,46 +137,82 @@ public class PluginFormAutofillAiService {
             return cached;
         }
 
-        // ========== 阶段 3：确定性匹配（< 1s，覆盖 ~80% 标准字段） ==========
-        p.onProgress(PluginAutofillProgressPhase.DETERMINISTIC_MATCHING, "正在执行确定性字段匹配", 18);
+        // ========== 阶段 3：站点模板匹配（最高优先级，命中即金标直填，毫秒级 ~100% 准确） ==========
+        p.onProgress(PluginAutofillProgressPhase.DETERMINISTIC_MATCHING, "正在执行站点模板匹配", 15);
+        SiteTemplateMatchResult templateResult;
+        try {
+            java.util.Optional<SiteTemplate> tpl = siteTemplateRegistry.match(req.getPage());
+            if (tpl.isPresent()) {
+                templateResult = siteTemplateMatcher.apply(tpl.get(), fields, detail.getDraft());
+            } else {
+                templateResult = SiteTemplateMatchResult.empty(fields);
+            }
+        } catch (Exception e) {
+            // 模板层任何异常 → 降级为全部字段交确定性匹配
+            log.warn("站点模板匹配异常，降级全部交确定性匹配: {}", e.getMessage(), e);
+            templateResult = SiteTemplateMatchResult.empty(fields);
+        }
+
+        // 推送 partialResult：模板已匹配部分可立即让前端开始填写
+        if (templateResult.getMatchedAssignments() != null && !templateResult.getMatchedAssignments().isEmpty()) {
+            PluginAutofillPlanResultVO partial = PluginAutofillPlanResultVO.builder()
+                    .fillable(true)
+                    .hint("站点模板已命中并完成部分字段直填，剩余字段继续处理")
+                    .assignments(templateResult.getMatchedAssignments())
+                    .blockedFields(templateResult.getBlockedFields())
+                    .build();
+            p.onPartialResult(partial);
+            p.onProgress(PluginAutofillProgressPhase.DETERMINISTIC_MATCHING,
+                    "站点模板匹配完成: 模板命中=" + templateResult.getMatchedAssignments().size()
+                            + " 剩余=" + templateResult.getUnmatchedFields().size(), 18);
+        }
+
+        // ========== 阶段 4：确定性匹配（仅处理模板层未匹配的字段） ==========
+        p.onProgress(PluginAutofillProgressPhase.DETERMINISTIC_MATCHING, "正在执行确定性字段匹配", 22);
         DeterministicMatchResult detResult;
         try {
-            detResult = deterministicFieldMatcher.matchAll(fields, detail.getDraft());
+            detResult = deterministicFieldMatcher.matchAll(templateResult.getUnmatchedFields(), detail.getDraft());
         } catch (Exception e) {
             // 确定性层任何异常 → 降级为全部字段交 LLM
             log.warn("确定性匹配异常，降级全部交 LLM: {}", e.getMessage(), e);
-            detResult = DeterministicMatchResult.allUnmatched(fields);
+            detResult = DeterministicMatchResult.allUnmatched(templateResult.getUnmatchedFields());
         }
 
-        // 推送 partialResult：前端可在 RUNNING 状态立即开始填写已匹配的字段
+        // 推送 partialResult：模板 + 确定性已匹配部分，前端可在 RUNNING 状态立即开始填写
         if (!detResult.getMatchedAssignments().isEmpty()) {
+            List<PluginFieldAssignmentDto> partialAssignments = new ArrayList<>(templateResult.getMatchedAssignments());
+            partialAssignments.addAll(detResult.getMatchedAssignments());
             PluginAutofillPlanResultVO partial = PluginAutofillPlanResultVO.builder()
                     .fillable(true)
                     .hint("确定性匹配已完成，剩余字段正在调用 AI 处理")
-                    .assignments(detResult.getMatchedAssignments())
-                    .blockedFields(detResult.getBlockedFields())
+                    .assignments(partialAssignments)
+                    .blockedFields(mergeBlocked(templateResult.getBlockedFields(), detResult.getBlockedFields()))
                     .build();
             p.onPartialResult(partial);
             p.onProgress(PluginAutofillProgressPhase.DETERMINISTIC_MATCHING,
                     "确定性匹配完成: 已匹配=" + detResult.getMatchedAssignments().size()
-                            + " 未匹配=" + detResult.getUnmatchedFields().size(), 22);
+                            + " 未匹配=" + detResult.getUnmatchedFields().size(), 26);
         }
 
-        // ========== 阶段 4：若全部字段已匹配 → 跳过 LLM ==========
+        // ========== 阶段 5：若模板+确定性已覆盖全部字段 → 跳过 LLM ==========
         if (detResult.getUnmatchedFields().isEmpty()) {
-            log.info("全部字段已由确定性匹配覆盖，跳过 LLM userId={} resumeId={}", userId, req.getResumeId());
+            log.info("全部字段已由模板+确定性匹配覆盖，跳过 LLM userId={} resumeId={} siteId={}",
+                    userId, req.getResumeId(), templateResult.getSiteId());
             PluginAutofillPlanResultVO fullResult = PluginAutofillPlanResultVO.builder()
                     .fillable(true)
-                    .assignments(detResult.getMatchedAssignments())
-                    .blockedFields(detResult.getBlockedFields())
+                    .siteId(templateResult.getSiteId())
+                    .assignments(concatAssignments(templateResult.getMatchedAssignments(),
+                            detResult.getMatchedAssignments()))
+                    .blockedFields(mergeBlocked(templateResult.getBlockedFields(),
+                            detResult.getBlockedFields()))
                     .build();
             // 写入结果缓存
             resultCacheService.put(userId, req.getResumeId(), resumeUpdatedAtMs, pageUrl, fields, fullResult);
-            p.onProgress(PluginAutofillProgressPhase.COMPLETED, "全部字段确定性匹配完成，无需调用 LLM", 100);
+            p.onProgress(PluginAutofillProgressPhase.COMPLETED, "全部字段模板/确定性匹配完成，无需调用 LLM", 100);
             return fullResult;
         }
 
-        // ========== 阶段 5：构建缩减版 prompt（仅未匹配字段） ==========
+        // ========== 阶段 6：构建缩减版 prompt（仅未匹配字段） ==========
         String resumeJson;
         try {
             resumeJson = objectMapper.writeValueAsString(detail.getDraft());
@@ -188,7 +233,7 @@ public class PluginFormAutofillAiService {
                 "已序列化简历与未匹配字段（LLM 待处理控件数=" + unmatchedFields.size()
                         + "，确定性已匹配=" + detResult.getMatchedAssignments().size() + "）", 28);
 
-        // ========== 阶段 6：调用 LangChain4j AI Service（字段少 → 推理更快） ==========
+        // ========== 阶段 7：调用 LangChain4j AI Service（字段少 → 推理更快） ==========
         String userMessage = promptProvider.buildUserMessage(resumeJson, pageJson, moduleCountsJson);
 
         p.onProgress(PluginAutofillProgressPhase.CALLING_MODEL,
@@ -214,58 +259,75 @@ public class PluginFormAutofillAiService {
 
         p.onProgress(PluginAutofillProgressPhase.PARSING_MODEL_JSON, "模型结果已解析", 65);
 
-        // ========== 阶段 7：清洗 LLM 结果（selector 白名单基于全量字段，确保 LLM 返回的 selector 均在快照中） ==========
+        // ========== 阶段 8：清洗 LLM 结果（selector 白名单基于全量字段，确保 LLM 返回的 selector 均在快照中） ==========
         p.onProgress(PluginAutofillProgressPhase.SANITIZING_PLAN, "正在执行 selector 白名单、锚点合并与 blockedFields 清洗", 78);
         PluginAutofillPlanResultVO llmResult = sanitizePlan(parsed, fields);
 
-        // ========== 阶段 8：合并确定性结果 + LLM 结果 ==========
-        PluginAutofillPlanResultVO merged = mergeResults(detResult, llmResult);
+        // ========== 阶段 9：合并模板 + 确定性 + LLM 结果（优先级：模板 > 确定性 > LLM） ==========
+        PluginAutofillPlanResultVO merged = mergeResults(templateResult, detResult, llmResult);
 
-        // ========== 阶段 9：写入结果缓存 ==========
+        // ========== 阶段 10：写入结果缓存 ==========
         resultCacheService.put(userId, req.getResumeId(), resumeUpdatedAtMs, pageUrl, fields, merged);
 
         p.onProgress(PluginAutofillProgressPhase.COMPLETED, "填表计划生成完毕", 100);
-        log.info("填表计划完成 userId={} resumeId={} fillable={} assignments={} blockedFields={} (确定性={} LLM={})",
-                userId, req.getResumeId(), merged.isFillable(),
+        log.info("填表计划完成 userId={} resumeId={} siteId={} fillable={} assignments={} blockedFields={} "
+                        + "(模板={} 确定性={} LLM={})",
+                userId, req.getResumeId(), templateResult.getSiteId(), merged.isFillable(),
                 merged.getAssignments() == null ? 0 : merged.getAssignments().size(),
                 merged.getBlockedFields() == null ? 0 : merged.getBlockedFields().size(),
+                templateResult.getMatchedAssignments() == null ? 0 : templateResult.getMatchedAssignments().size(),
                 detResult.getMatchedAssignments().size(),
                 llmResult.getAssignments() == null ? 0 : llmResult.getAssignments().size());
         return merged;
     }
 
     /**
-     * 合并确定性匹配结果与 LLM 结果：确定性匹配的 assignment 优先，LLM 结果中与之重复的 selector 被丢弃。
-     * order 从 1 开始重新分配（确定性字段在前，LLM 字段在后）。
+     * 三层合并：模板匹配 > 确定性匹配 > LLM。高优先级层已覆盖的 selector，低优先级层中重复的 assignment 被丢弃。
+     * order 从 1 开始重新分配（模板字段在前，确定性次之，LLM 在后）。
      */
-    private PluginAutofillPlanResultVO mergeResults(DeterministicMatchResult detResult,
+    private PluginAutofillPlanResultVO mergeResults(SiteTemplateMatchResult templateResult,
+                                                    DeterministicMatchResult detResult,
                                                     PluginAutofillPlanResultVO llmResult) {
         List<PluginFieldAssignmentDto> merged = new ArrayList<>();
+        Set<String> coveredSelectors = new HashSet<>();
 
-        // 确定性匹配的 selector 集合——用于去重
-        Set<String> detSelectors = new HashSet<>();
-        for (PluginFieldAssignmentDto a : detResult.getMatchedAssignments()) {
-            detSelectors.add(normalizeSelectorKey(a.getSelector()));
-            merged.add(a);
+        // 第 1 层：模板匹配（最高优先级）
+        if (templateResult.getMatchedAssignments() != null) {
+            for (PluginFieldAssignmentDto a : templateResult.getMatchedAssignments()) {
+                coveredSelectors.add(normalizeSelectorKey(a.getSelector()));
+                merged.add(a);
+            }
         }
 
-        // LLM 结果中与确定性层不重复的 assignment 追加到末尾
+        // 第 2 层：确定性匹配（跳过模板已覆盖的 selector）
+        for (PluginFieldAssignmentDto a : detResult.getMatchedAssignments()) {
+            String normSel = normalizeSelectorKey(a.getSelector());
+            if (!coveredSelectors.contains(normSel)) {
+                coveredSelectors.add(normSel);
+                merged.add(a);
+            }
+        }
+
+        // 第 3 层：LLM（跳过上层已覆盖的 selector）
         if (llmResult.getAssignments() != null) {
             for (PluginFieldAssignmentDto a : llmResult.getAssignments()) {
                 String normSel = normalizeSelectorKey(a.getSelector());
-                if (!detSelectors.contains(normSel)) {
+                if (!coveredSelectors.contains(normSel)) {
+                    coveredSelectors.add(normSel);
                     merged.add(a);
                 }
             }
         }
 
-        // 重新编号 order（确定性字段在前，LLM 字段在后）
+        // 重新编号 order（模板 → 确定性 → LLM）
         for (int i = 0; i < merged.size(); i++) {
             merged.get(i).setOrder(i + 1);
         }
 
-        // 合并 blockedFields（去重）
-        List<PluginBlockedFieldDto> allBlocked = new ArrayList<>(detResult.getBlockedFields());
+        // 合并 blockedFields（三层去重）
+        List<PluginBlockedFieldDto> allBlocked = mergeBlocked(
+                templateResult.getBlockedFields(),
+                detResult.getBlockedFields());
         Set<String> blockedSelectors = new HashSet<>();
         for (PluginBlockedFieldDto b : allBlocked) {
             blockedSelectors.add(normalizeSelectorKey(b.getSelector()));
@@ -281,10 +343,40 @@ public class PluginFormAutofillAiService {
         boolean fillable = !merged.isEmpty() || (llmResult.isFillable());
         return PluginAutofillPlanResultVO.builder()
                 .fillable(fillable)
+                .siteId(templateResult.getSiteId())
                 .hint(llmResult.getHint())
                 .assignments(merged)
                 .blockedFields(allBlocked)
                 .build();
+    }
+
+    /** 拼接两层 assignment 列表（不去重，调用方保证无重复或后续 merge 去重） */
+    private List<PluginFieldAssignmentDto> concatAssignments(List<PluginFieldAssignmentDto> first,
+                                                             List<PluginFieldAssignmentDto> second) {
+        List<PluginFieldAssignmentDto> out = new ArrayList<>(
+                first != null ? first : List.of());
+        if (second != null) {
+            out.addAll(second);
+        }
+        return out;
+    }
+
+    /** 合并两个 blockedFields 列表，按规范化 selector 去重，保留先出现者 */
+    private List<PluginBlockedFieldDto> mergeBlocked(List<PluginBlockedFieldDto> first,
+                                                     List<PluginBlockedFieldDto> second) {
+        List<PluginBlockedFieldDto> out = new ArrayList<>(first != null ? first : List.of());
+        Set<String> seen = new HashSet<>();
+        for (PluginBlockedFieldDto b : out) {
+            seen.add(normalizeSelectorKey(b.getSelector()));
+        }
+        if (second != null) {
+            for (PluginBlockedFieldDto b : second) {
+                if (seen.add(normalizeSelectorKey(b.getSelector()))) {
+                    out.add(b);
+                }
+            }
+        }
+        return out;
     }
 
     private List<PluginPageFormFieldDto> truncateFields(List<PluginPageFormFieldDto> rawFields) {

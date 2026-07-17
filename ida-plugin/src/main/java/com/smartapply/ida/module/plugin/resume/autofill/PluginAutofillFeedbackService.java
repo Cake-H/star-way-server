@@ -8,14 +8,13 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
-import java.util.Map;
+import java.util.List;
 
 /**
- * 自动填表反馈服务：将前端上报的逐字段填写结果异步写入 Redis List。
+ * 自动填表反馈服务：将前端上报的逐字段填写结果异步写入 Redis List，由
+ * {@link PluginAutofillFeedbackConsumer} 定时消费入库做统计分析。
  * <p>
  * 写入失败仅 log.warn，不影响主流程。
- * 后续可添加定时任务从 Redis List 消费入库做统计分析（option_not_found 频率、selector_miss 频率等）。
  */
 @Slf4j
 @Service
@@ -34,19 +33,19 @@ public class PluginAutofillFeedbackService {
     @Async
     public void submitFeedback(long userId, PluginAutofillFeedbackRequest request) {
         try {
-            Map<String, Object> record = Map.of(
-                    "userId", userId,
-                    "resumeId", request.getResumeId(),
-                    "taskId", request.getTaskId() != null ? request.getTaskId() : "",
-                    "pageUrl", request.getPageUrl() != null ? request.getPageUrl() : "",
-                    "fields", request.getFields() != null ? request.getFields() : java.util.List.of(),
-                    "timestamp", Instant.now().toString()
-            );
+            PluginAutofillFeedbackRecord record = new PluginAutofillFeedbackRecord();
+            record.setUserId(userId);
+            record.setResumeId(request.getResumeId());
+            record.setTaskId(request.getTaskId());
+            record.setPageUrl(request.getPageUrl());
+            record.setSiteId(request.getSiteId());
+            record.setFields(request.getFields() != null ? request.getFields() : List.of());
+
             String json = objectMapper.writeValueAsString(record);
             stringRedisTemplate.opsForList().rightPush(FEEDBACK_QUEUE_KEY, json);
-            log.info("自动填表反馈已写入 Redis: userId={}, resumeId={}, fieldCount={}",
-                    userId, request.getResumeId(),
-                    request.getFields() != null ? request.getFields().size() : 0);
+            log.info("自动填表反馈已入队: userId={}, resumeId={}, siteId={}, fieldCount={}",
+                    userId, request.getResumeId(), request.getSiteId(),
+                    record.getFields().size());
         } catch (Exception e) {
             log.warn("自动填表反馈写入 Redis 失败: {}", e.getMessage());
         }

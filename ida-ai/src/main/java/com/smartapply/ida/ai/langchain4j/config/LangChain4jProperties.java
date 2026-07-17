@@ -38,6 +38,10 @@ public class LangChain4jProperties {
     private ModelConfig interviewSummarize = new ModelConfig();
 
     /**
+     * 模拟面试题目生成配置
+     */
+    private ModelConfig mockInterview = new ModelConfig();
+    /**
      * 通用模型配置。
      */
     @Data

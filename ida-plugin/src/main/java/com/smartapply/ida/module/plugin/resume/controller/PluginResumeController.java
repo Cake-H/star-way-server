@@ -3,6 +3,7 @@ package com.smartapply.ida.module.plugin.resume.controller;
 import com.smartapply.ida.ai.plugin.PluginFormAutofillAiService;
 import com.smartapply.ida.common.domain.ResponseDTO;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillFeedbackRequest;
+import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillFeedbackStatVO;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanRequest;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanResultVO;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillResumeContextVO;
@@ -14,6 +15,7 @@ import com.smartapply.ida.constant.ApiRouteConstants;
 import com.smartapply.ida.http.annotation.RequestUserId;
 import com.smartapply.ida.module.app.resume.service.AppResumeQueryService;
 import com.smartapply.ida.module.plugin.resume.autofill.PluginAutofillFeedbackService;
+import com.smartapply.ida.module.plugin.resume.autofill.PluginAutofillFeedbackStatsService;
 import com.smartapply.ida.module.plugin.resume.autofill.PluginAutofillTaskService;
 import com.smartapply.ida.module.plugin.resume.autofill.ResumePreloadCacheService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -76,6 +79,10 @@ public class PluginResumeController {
      * 反馈服务：异步写入 Redis，不影响主流程。
      */
     private final PluginAutofillFeedbackService pluginAutofillFeedbackService;
+    /**
+     * 反馈统计：用户级命中率与失败原因/字段/站点聚合，驱动模板校准与同义词扩充。
+     */
+    private final PluginAutofillFeedbackStatsService pluginAutofillFeedbackStatsService;
     /**
      * 简历预加载缓存：autofill-context 请求时提前将简历写入 Redis，planAutofill 直接读取。
      */
@@ -190,5 +197,18 @@ public class PluginResumeController {
                 body.getFields() != null ? body.getFields().size() : 0);
         pluginAutofillFeedbackService.submitFeedback(userId, body);
         return ResponseDTO.ok(null);
+    }
+
+    /**
+     * 用户级填表反馈统计：近 N 天命中率与 Top 失败原因/字段/站点，用于定位「哪类字段最常卡住」。
+     * 全局运营统计由后台管理系统提供，不在本接口。
+     */
+    @Operation(summary = "一键填表：我的填写反馈统计（命中率/失败原因/失败字段/站点，近 N 天）")
+    @GetMapping("/autofill-feedback/stats")
+    public ResponseDTO<PluginAutofillFeedbackStatVO> getAutofillFeedbackStats(
+            @RequestUserId(required = true) Long userId,
+            @RequestParam(value = "days", required = false) Integer days,
+            @RequestParam(value = "siteHost", required = false) String siteHost) {
+        return ResponseDTO.ok(pluginAutofillFeedbackStatsService.stats(userId, days, siteHost));
     }
 }

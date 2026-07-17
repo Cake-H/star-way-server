@@ -1,0 +1,473 @@
+{
+  "info": {
+    "_postman_id": "mock-interview-test",
+    "name": "模拟面试接口测试集",
+    "description": "Maverick 项目模拟面试模块 Apifox/Postman 可导入测试用例。导入后请把 baseUrl/userId/resumeId 等变量改成你的实际值。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 创建模拟面试 - 正常",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"resumeId\": {{resumeId}},\n  \"title\": \"Java 后端开发 · 模拟面试\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview"
+          ]
+        },
+        "description": "预期：code=0，data 为新建的 sessionId。数据库中会新增 session 和若干 question。"
+      },
+      "response": []
+    },
+    {
+      "name": "02 创建模拟面试 - resumeId 为空",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"测试\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview"
+          ]
+        },
+        "description": "预期：返回参数错误，提示 resumeId 不能为空。"
+      },
+      "response": []
+    },
+    {
+      "name": "03 创建模拟面试 - 非本人简历",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"resumeId\": 99999,\n  \"title\": \"越权测试\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview"
+          ]
+        },
+        "description": "预期：返回「简历不存在或无权访问」。"
+      },
+      "response": []
+    },
+    {
+      "name": "04 获取模拟面试列表",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview"
+          ]
+        },
+        "description": "预期：code=0，返回当前用户的模拟面试列表。"
+      },
+      "response": []
+    },
+    {
+      "name": "05 获取模拟面试详情",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview/{{sessionId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview",
+            "{{sessionId}}"
+          ]
+        },
+        "description": "预期：code=0，返回 session 元信息 + progress + questions 列表。"
+      },
+      "response": []
+    },
+    {
+      "name": "06 更新状态 - PRACTICING",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview/{{sessionId}}/status?status=PRACTICING",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview",
+            "{{sessionId}}",
+            "status"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "PRACTICING"
+            }
+          ]
+        },
+        "description": "预期：code=0，数据库 status 更新为 PRACTICING。"
+      },
+      "response": []
+    },
+    {
+      "name": "07 更新状态 - 非法状态",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview/{{sessionId}}/status?status=INVALID",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview",
+            "{{sessionId}}",
+            "status"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "INVALID"
+            }
+          ]
+        },
+        "description": "预期：返回「无效的模拟面试状态」。"
+      },
+      "response": []
+    },
+    {
+      "name": "08 保存练习进度 - 正常",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"currentQuestionId\": {{questionId}},\n  \"answerRevealed\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview/{{sessionId}}/progress",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview",
+            "{{sessionId}}",
+            "progress"
+          ]
+        },
+        "description": "预期：code=0，数据库 current_question_id 和 answer_revealed 更新。"
+      },
+      "response": []
+    },
+    {
+      "name": "09 保存练习进度 - answerRevealed 不传",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"currentQuestionId\": {{questionId}}\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview/{{sessionId}}/progress",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview",
+            "{{sessionId}}",
+            "progress"
+          ]
+        },
+        "description": "预期：code=0，answer_revealed 置为 0，不抛异常。"
+      },
+      "response": []
+    },
+    {
+      "name": "10 保存练习进度 - 题目不属于当前 session",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"currentQuestionId\": 99999,\n  \"answerRevealed\": false\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview/{{sessionId}}/progress",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview",
+            "{{sessionId}}",
+            "progress"
+          ]
+        },
+        "description": "预期：返回「当前题目不存在或不属于本场模拟面试」。"
+      },
+      "response": []
+    },
+    {
+      "name": "11 删除模拟面试",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview/{{sessionId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview",
+            "{{sessionId}}"
+          ]
+        },
+        "description": "预期：code=0。session 及其下所有 question 的 deleted_at 被置为当前时间。"
+      },
+      "response": []
+    },
+    {
+      "name": "12 删除后再查详情",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview/{{sessionId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview",
+            "{{sessionId}}"
+          ]
+        },
+        "description": "预期：返回「模拟面试不存在或无权访问」。"
+      },
+      "response": []
+    },
+    {
+      "name": "13 越权访问其他用户模拟面试",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "2",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/app/mock-interview/{{sessionId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "app",
+            "mock-interview",
+            "{{sessionId}}"
+          ]
+        },
+        "description": "预期：userId=2 访问 userId=1 的 session，返回「模拟面试不存在或无权访问」。"
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8088",
+      "type": "string",
+      "description": "服务地址"
+    },
+    {
+      "key": "userId",
+      "value": "1",
+      "type": "string",
+      "description": "当前登录用户 ID"
+    },
+    {
+      "key": "resumeId",
+      "value": "1",
+      "type": "string",
+      "description": "用于创建模拟面试的简历 ID"
+    },
+    {
+      "key": "sessionId",
+      "value": "1",
+      "type": "string",
+      "description": "模拟面试 sessionId，创建后把返回值填到这里"
+    },
+    {
+      "key": "questionId",
+      "value": "1",
+      "type": "string",
+      "description": "当前 session 下的题目 ID，查详情后把第一个题目的 id 填到这里"
+    }
+  ]
+}
