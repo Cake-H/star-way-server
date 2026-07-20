@@ -8,6 +8,7 @@ import com.smartapply.ida.ai.plugin.deterministic.DeterministicFieldMatcher;
 import com.smartapply.ida.ai.plugin.deterministic.DeterministicMatchResult;
 import com.smartapply.ida.ai.plugin.site.SiteTemplateMatcher;
 import com.smartapply.ida.ai.plugin.site.SiteTemplateRegistry;
+import com.smartapply.ida.ai.usage.AiUsageBizType;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanRequest;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanResultVO;
 import com.smartapply.ida.common.domain.plugin.autofill.site.SiteTemplate;
@@ -20,6 +21,7 @@ import com.smartapply.ida.common.domain.plugin.autofill.PluginSubAssignmentDto;
 import com.smartapply.ida.common.domain.resume.support.ResumeDraftModuleCountsExtractor;
 import com.smartapply.ida.common.domain.resume.vo.ResumeDetailVO;
 import com.smartapply.ida.common.exception.BusinessException;
+import com.smartapply.ida.module.app.billing.service.BillingService;
 import com.smartapply.ida.module.app.resume.service.AppResumeQueryService;
 import com.smartapply.ida.module.plugin.resume.autofill.PluginAutofillResultCacheService;
 import com.smartapply.ida.module.plugin.resume.autofill.ResumePreloadCacheService;
@@ -71,6 +73,7 @@ public class PluginFormAutofillAiService {
     private final PluginAutofillResultCacheService resultCacheService;
     /** 简历预加载缓存：优先从 Redis 读取，miss 再查 DB */
     private final ResumePreloadCacheService resumePreloadCacheService;
+    private final BillingService billingService;
 
     /**
      * 同步生成填表计划（原 {@code POST /autofill-plan} 路径）：不向外报告细粒度进度，避免重复日志。
@@ -241,7 +244,12 @@ public class PluginFormAutofillAiService {
 
         PluginAutofillPlanResultVO parsed;
         try {
-            parsed = assistant.planAutofill(PluginAutofillPromptProvider.SYSTEM, userMessage);
+            parsed = billingService.execute(
+                    userId, AiUsageBizType.PLUGIN_AUTOFILL, req.getResumeId(),
+                    () -> assistant.planAutofill(PluginAutofillPromptProvider.SYSTEM, userMessage));
+        } catch (BusinessException e) {
+            // 额度不足等业务异常直接透传，不再包装为“大模型失败”
+            throw e;
         } catch (Exception e) {
             log.error("填表调用大模型失败 userId={} resumeId={}", userId, req.getResumeId(), e);
             throw new BusinessException("调用大模型失败：" + e.getMessage());

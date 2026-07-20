@@ -1,5 +1,6 @@
 package com.smartapply.ida.common.domain.user;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import lombok.AllArgsConstructor;
@@ -27,6 +28,18 @@ public class UserEntity {
 
     /** 1=正常 0=禁用，禁用用户不可登录 */
     private Integer status;
+
+    /** AI 额度余额（点），见 {@code ida_v5_billing.sql} */
+    private Integer balance;
+
+    /** 累计发放额度（点），运营统计用 */
+    private Integer totalQuota;
+
+    /** 会员等级：FREE/PRO...（预留，M4 会员体系启用） */
+    private String memberLevel;
+
+    /** 最近一次每日免费额度发放日期（懒发放去重依据） */
+    private LocalDate lastDailyGrantDate;
 
     private LocalDateTime createdAt;
 

@@ -13,7 +13,9 @@ public enum UserErrorCode implements ErrorCode {
     LOGIN_STATE_INVALID(30007, "未登录或登录已失效，请重新登录"),
     NO_PERMISSION(30005, "无权限执行此操作"),
     /** 业务规则不满足时抛出 {@link com.smartapply.ida.common.exception.BusinessException} 后映射到此码 */
-    OPERATION_FAILED(30100, "操作无法完成");
+    OPERATION_FAILED(30100, "操作无法完成"),
+    /** AI 额度耗尽，前端应引导充值/兑换额度 */
+    QUOTA_INSUFFICIENT(30200, "AI 额度不足，请充值或明日再来");
 
     private final int code;
     private final String msg;

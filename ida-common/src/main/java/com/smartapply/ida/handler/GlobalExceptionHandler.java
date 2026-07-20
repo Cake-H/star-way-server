@@ -102,7 +102,9 @@ public class GlobalExceptionHandler {
         if (!systemEnvironment.isProd()) {
             log.info("业务异常, url={} msg={}", currentRequestUri(), e.getMessage());
         }
-        return ResponseDTO.error(UserErrorCode.OPERATION_FAILED, e.getMessage());
+        // 指定了错误码（如 QUOTA_INSUFFICIENT 需前端引导充值）则按码返回，否则回退通用业务失败码
+        UserErrorCode code = e.getErrorCode() instanceof UserErrorCode uec ? uec : UserErrorCode.OPERATION_FAILED;
+        return ResponseDTO.error(code, e.getMessage());
     }
 
     /**

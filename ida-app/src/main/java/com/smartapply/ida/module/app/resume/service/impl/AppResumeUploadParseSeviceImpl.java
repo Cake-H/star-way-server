@@ -69,8 +69,8 @@ public class AppResumeUploadParseSeviceImpl implements AppResumeUploadParseServi
             plain = plain.substring(0, maxChars);
         }
 
-        // 步骤 4：调用大模型，将模型输出的 JSON 转为系统内统一的 ResumeParseDraftDto
-        var draft = arkStructuringService.structure(plain);
+        // 步骤 4：调用大模型（AI Service 层已内置额度守卫 + 用量计量）
+        var draft = arkStructuringService.structure(userId, plain);
 
         // 日志不落全文，仅记录长度与 OSS 键，降低隐私泄露风险
         log.info("简历解析完成 userId={} ossKey={} plainLen={}", userId, put.objectKey(), plain.length());

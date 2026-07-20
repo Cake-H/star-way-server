@@ -4,6 +4,7 @@ import com.smartapply.ida.ai.langchain4j.assistant.InterviewSummarizeAssistant;
 import com.smartapply.ida.ai.langchain4j.assistant.MockInterviewGenerateAssistant;
 import com.smartapply.ida.ai.langchain4j.assistant.PluginAutofillAssistant;
 import com.smartapply.ida.ai.langchain4j.assistant.ResumeParseAssistant;
+import com.smartapply.ida.ai.usage.TokenUsageCaptureListener;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.service.AiServices;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * LangChain4j 自动配置。
@@ -100,6 +102,9 @@ public class LangChain4jAutoConfiguration {
 
     // ==================== Private Methods ====================
 
+    /** 计量监听器：所有业务 ChatModel 共用，响应时回填 token 用量到 {@link com.smartapply.ida.ai.usage.AiUsageContext} */
+    private final TokenUsageCaptureListener tokenUsageCaptureListener = new TokenUsageCaptureListener();
+
     private OpenAiChatModel buildChatModel(LangChain4jProperties.ModelConfig config, String sceneName) {
         String apiKey = properties.resolveApiKey();
         if (apiKey == null || apiKey.isBlank()) {
@@ -112,7 +117,8 @@ public class LangChain4jAutoConfiguration {
                 .apiKey(apiKey != null ? apiKey : "placeholder")
                 .modelName(config.getModel())
                 .temperature(config.getTemperature())
-                .timeout(Duration.ofMillis(config.getReadTimeoutMs()));
+                .timeout(Duration.ofMillis(config.getReadTimeoutMs()))
+                .listeners(List.of(tokenUsageCaptureListener));
 
         if (config.getMaxTokens() != null && config.getMaxTokens() > 0) {
             builder.maxTokens(config.getMaxTokens());

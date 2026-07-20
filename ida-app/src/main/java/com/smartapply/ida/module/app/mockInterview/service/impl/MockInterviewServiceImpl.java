@@ -3,9 +3,9 @@ package com.smartapply.ida.module.app.mockInterview.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartapply.ida.ai.mockInterview.MockInterviewGenerateAiService;
-import com.smartapply.ida.common.exception.BusinessException;
 import com.smartapply.ida.common.domain.mockInterview.MockInterviewQuestion;
 import com.smartapply.ida.common.domain.mockInterview.MockInterviewSession;
+import com.smartapply.ida.common.exception.BusinessException;
 import com.smartapply.ida.common.domain.mockInterview.dto.MockInterviewCreateDTO;
 import com.smartapply.ida.common.domain.mockInterview.dto.MockInterviewUpdateProgressDTO;
 import com.smartapply.ida.common.domain.mockInterview.vo.*;
@@ -116,8 +116,8 @@ public class MockInterviewServiceImpl implements MockInterviewService {
         // 把简历草稿序列化为文本上下文
         String resumeContext = serializeResumeDraft(resumeDetail);
 
-        // 调用LLM生成题目
-        MockInterviewGenerateResultVO generated = mockInterviewGenerateAiService.generateQuestions(resumeContext);
+        // 调用LLM生成题目（AI Service 层已内置额度守卫 + 用量计量）
+        MockInterviewGenerateResultVO generated = mockInterviewGenerateAiService.generateQuestions(userId, resumeContext);
         List<MockInterviewGenerateResultVO.MockInterviewQuestionDraftVO> drafts =
                 generated.getQuestions() == null ? new ArrayList<>() : generated.getQuestions();
 

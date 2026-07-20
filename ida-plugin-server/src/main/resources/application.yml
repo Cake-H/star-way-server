@@ -105,3 +105,10 @@ ida:
       max-tokens: 8192
       read-timeout-ms: 300000
       response-format-json-object: true
+
+  # 额度计费 — 防止 AI 放量亏损（ida_v5_billing.sql）
+  billing:
+    enabled: true
+    tokens-per-point: 1000
+    min-points-per-call: 1
+    daily-free-points: 10

@@ -187,7 +187,9 @@ public class AppInterviewServiceImpl implements AppInterviewService {
         InterviewSession session = sessionGuard.requireOwned(userId, sessionId);
         String transcript = resolveTranscript(file, rawTranscript);
         log.info("面试语音转写全文 sessionId={} len={} text={}", sessionId, transcript.length(), transcript);
+        // AI Service 层已内置额度守卫 + 用量计量
         InterviewVoiceSummarizeResultVO result = interviewSummarizeAiService.summarize(session, transcript);
+
         log.info("面试语音总结完成 sessionId={} questionCount={}", sessionId,
                 result.getQuestions() != null ? result.getQuestions().size() : 0);
         return result;

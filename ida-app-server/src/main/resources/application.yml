@@ -105,6 +105,13 @@ ida:
       read-timeout-ms: 300000
       response-format-json-object: true
 
+  # 额度计费 — 防止 AI 放量亏损（ida_v5_billing.sql）
+  billing:
+    enabled: true
+    tokens-per-point: 1000
+    min-points-per-call: 1
+    daily-free-points: 10
+
   # 语音识别 — 公共参数（凭证在 application-{dev|prod}.yml 中覆盖）
   speech-to-text:
     enabled: true

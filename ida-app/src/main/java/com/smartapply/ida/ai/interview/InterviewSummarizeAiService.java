@@ -2,11 +2,13 @@ package com.smartapply.ida.ai.interview;
 
 import com.smartapply.ida.ai.langchain4j.assistant.InterviewSummarizeAssistant;
 import com.smartapply.ida.ai.langchain4j.prompt.InterviewSummarizePromptProvider;
+import com.smartapply.ida.ai.usage.AiUsageBizType;
 import com.smartapply.ida.common.domain.interview.InterviewSession;
 import com.smartapply.ida.common.domain.interview.vo.InterviewQuestionDraftVO;
 import com.smartapply.ida.common.domain.interview.vo.InterviewSessionMetaDraftVO;
 import com.smartapply.ida.common.domain.interview.vo.InterviewVoiceSummarizeResultVO;
 import com.smartapply.ida.common.exception.BusinessException;
+import com.smartapply.ida.module.app.billing.service.BillingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,6 +40,7 @@ public class InterviewSummarizeAiService {
 
     private final InterviewSummarizeAssistant assistant;
     private final InterviewSummarizePromptProvider promptProvider;
+    private final BillingService billingService;
 
     /**
      * @param session    当前复盘场次（用于 User 消息中的已保存元信息对照）
@@ -59,10 +62,15 @@ public class InterviewSummarizeAiService {
 
         log.info("面试总结开始 sessionId={}", session.getId());
 
-        // 调用 LangChain4j AI Service，直接返回强类型对象
+        // 调用 LangChain4j AI Service，直接返回强类型对象（额度守卫 + 用量计量）
         InterviewVoiceSummarizeResultVO result;
         try {
-            result = assistant.summarize(InterviewSummarizePromptProvider.SYSTEM, userMessage);
+            result = billingService.execute(
+                    session.getUserId(), AiUsageBizType.INTERVIEW_SUMMARIZE, session.getId(),
+                    () -> assistant.summarize(InterviewSummarizePromptProvider.SYSTEM, userMessage));
+        } catch (BusinessException e) {
+            // 额度不足等业务异常直接透传，不再包装为“大模型失败”
+            throw e;
         } catch (Exception e) {
             log.error("面试总结调用大模型失败 sessionId={}", session.getId(), e);
             throw new BusinessException("调用大模型失败：" + e.getMessage());
