@@ -37,7 +37,7 @@ END$$
 DELIMITER ;
 
 CALL `ida_add_column_if_missing`('ida_user', 'balance',
-    '`balance` INT NOT NULL DEFAULT 0 COMMENT ''AI 额度余额（点）''');
+    '`balance` INT NOT NULL DEFAULT 0 COMMENT ''AI 额度余额（点），可为负（欠费，后续发放/充值优先抵扣）''');
 CALL `ida_add_column_if_missing`('ida_user', 'total_quota',
     '`total_quota` INT NOT NULL DEFAULT 0 COMMENT ''累计发放额度（点）''');
 CALL `ida_add_column_if_missing`('ida_user', 'member_level',

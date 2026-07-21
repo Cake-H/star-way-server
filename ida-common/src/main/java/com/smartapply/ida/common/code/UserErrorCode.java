@@ -15,7 +15,9 @@ public enum UserErrorCode implements ErrorCode {
     /** 业务规则不满足时抛出 {@link com.smartapply.ida.common.exception.BusinessException} 后映射到此码 */
     OPERATION_FAILED(30100, "操作无法完成"),
     /** AI 额度耗尽，前端应引导充值/兑换额度 */
-    QUOTA_INSUFFICIENT(30200, "AI 额度不足，请充值或明日再来");
+    QUOTA_INSUFFICIENT(30200, "AI 额度不足，请充值或明日再来"),
+    /** 兑换码不存在、已使用、已过期或已禁用 */
+    REDEEM_CODE_INVALID(30201, "兑换码无效或已过期");
 
     private final int code;
     private final String msg;
