@@ -1,0 +1,68 @@
+# ============================================================
+# 公共配置 — 所有环境共享（框架、中间件行为、业务参数常量）
+# 环境差异项请在 application-{dev|prod}.yml 中覆盖
+# ============================================================
+
+server:
+  port: ${ADMIN_SERVER_PORT:8090}
+
+spring:
+  application:
+    name: ida-admin-server
+  profiles:
+    active: dev
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      logic-delete-field: deletedAt
+      logic-not-delete-value: 'null'
+      logic-delete-value: 'now()'
+
+# -------------------- 接口文档 --------------------
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui
+  default-flat-param-object: true
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+    enable-default-group: true
+    default-group-name: admin
+
+# -------------------- IDA 公共业务配置 --------------------
+ida:
+  cors:
+    allowed-origin-patterns:
+      - "*"
+    exposed-headers: []
+
+  http:
+    identity:
+      user-id-header: X-User-Id
+      request-id-header: X-Request-Id
+      authorization-header: Authorization
+
+  auth:
+    session:
+      token-ttl-seconds: 604800
+      bearer-prefix: "Bearer "
+
+  # 管理后台管理员会话（与 C 端 ida.auth.session 隔离，Redis key 前缀不同）
+  admin:
+    auth:
+      token-ttl-seconds: 43200
+      redis-token-key-prefix: "ida:admin:token:"
+      # 登录防爆破：连续失败次数上限与锁定时长（秒）
+      login-max-fail-count: 5
+      login-lock-seconds: 600

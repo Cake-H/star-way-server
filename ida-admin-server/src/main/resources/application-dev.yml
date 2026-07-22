@@ -1,0 +1,42 @@
+# ============================================================
+# 开发环境配置 — 本地开发使用
+# 所有敏感信息都有本地默认值，方便开箱即用
+# ============================================================
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:ida_db}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:}
+
+  data:
+    redis:
+      host: ${IDA_REDIS_HOST:127.0.0.1}
+      port: ${IDA_REDIS_PORT:6379}
+      password: ${IDA_REDIS_PASSWORD:}
+      database: ${IDA_ADMIN_REDIS_DB:0}
+      timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
+
+http:
+  pool:
+    max-total: 20
+    connect-timeout: 5000
+    read-timeout: 30000
+    write-timeout: 30000
+    keep-alive: 300000
+
+ida:
+  server:
+    access-host: ${IDA_ACCESS_HOST:127.0.0.1}
+    api-v1-prefix: /api/v1/admin
+
+logging:
+  level:
+    com.smartapply: debug

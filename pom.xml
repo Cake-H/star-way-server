@@ -25,6 +25,8 @@
         <module>ida-plugin</module>
         <module>ida-app-server</module>
         <module>ida-plugin-server</module>
+        <module>ida-admin</module>
+        <module>ida-admin-server</module>
     </modules>
 
     <properties>
@@ -74,6 +76,16 @@
             <dependency>
                 <groupId>com.smartapply</groupId>
                 <artifactId>ida-plugin-server</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.smartapply</groupId>
+                <artifactId>ida-admin</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.smartapply</groupId>
+                <artifactId>ida-admin-server</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!-- Boot 3 使用 jakarta 版；BOM 内锁定与 Knife4j 兼容的 SpringDoc 版本 -->
