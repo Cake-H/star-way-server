@@ -9,6 +9,8 @@ import com.smartapply.ida.common.domain.interview.vo.InterviewSessionMetaDraftVO
 import com.smartapply.ida.common.domain.interview.vo.InterviewVoiceSummarizeResultVO;
 import com.smartapply.ida.common.exception.BusinessException;
 import com.smartapply.ida.module.app.billing.service.BillingService;
+import com.smartapply.ida.security.mask.SensitiveDataMasker;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,6 +40,8 @@ public class InterviewSummarizeAiService {
     /** 单字段写入库前的保护上限，避免异常长文本 */
     private static final int MAX_FIELD_CHARS = 8000;
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     private final InterviewSummarizeAssistant assistant;
     private final InterviewSummarizePromptProvider promptProvider;
     private final BillingService billingService;
@@ -51,6 +55,9 @@ public class InterviewSummarizeAiService {
             throw new BusinessException("无法识别语音，请重录或改用文字");
         }
 
+        // 隐私（1.4 基线）：转写全文可能含手机号/身份证/邮箱，发送 LLM 前替换为占位符，返回后还原
+        SensitiveDataMasker.MaskSession maskSession = SensitiveDataMasker.mask(transcript.trim());
+
         String today = LocalDate.now(ZoneId.of("Asia/Shanghai")).toString();
         String userMessage = promptProvider.buildUserMessage(
                 today,
@@ -58,7 +65,7 @@ public class InterviewSummarizeAiService {
                 session.getPositionName(),
                 session.getInterviewRound(),
                 session.getInterviewAt() != null ? session.getInterviewAt().toString() : "",
-                transcript.trim());
+                maskSession.maskedText());
 
         log.info("面试总结开始 sessionId={}", session.getId());
 
@@ -84,7 +91,23 @@ public class InterviewSummarizeAiService {
                 result.getQuestions() != null ? result.getQuestions().size() : 0);
 
         // 后处理：校验日期、补全 suggestedTitle、过滤空问题等（保留原有逻辑）
-        return sanitizeResult(result);
+        return sanitizeResult(restoreResult(result, maskSession));
+    }
+
+    /** 占位符还原：JSON 往返覆盖全部字段；失败降级返回未还原结果并告警。 */
+    private InterviewVoiceSummarizeResultVO restoreResult(InterviewVoiceSummarizeResultVO result,
+                                                          SensitiveDataMasker.MaskSession session) {
+        if (result == null || session == null || session.mapping().isEmpty()) {
+            return result;
+        }
+        try {
+            String json = MAPPER.writeValueAsString(result);
+            return MAPPER.readValue(SensitiveDataMasker.restore(json, session),
+                    InterviewVoiceSummarizeResultVO.class);
+        } catch (Exception e) {
+            log.warn("面试总结结果占位符还原失败，返回未还原结果: {}", e.getMessage());
+            return result;
+        }
     }
 
     /** 校验日期格式、补全 suggestedTitle、过滤空 question 行。 */

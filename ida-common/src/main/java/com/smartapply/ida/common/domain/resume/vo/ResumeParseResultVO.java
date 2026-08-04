@@ -36,9 +36,10 @@ public class ResumeParseResultVO {
     private String ossObjectKey;
 
     /**
-     * 若 Bucket 为公共读或已拼接静态域名，则给出可浏览器访问的 URL；否则为 null。
+     * 预签名下载 URL（GET，1 小时过期）：Bucket 为私有读，匿名直链不可访问，
+     * 前端如需预览原件应使用本字段的临时签名链接；OSS 未启用或签发失败时为 null。
      */
-    private String ossPublicUrl;
+    private String ossSignedUrl;
 
     /** 抽取出的纯文本字符数（送入模型前可能已截断，见 {@link #parseNotes}） */
     private int plainTextCharLength;

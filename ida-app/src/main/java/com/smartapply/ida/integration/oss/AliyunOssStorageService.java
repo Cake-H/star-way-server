@@ -4,12 +4,16 @@ import com.aliyun.oss.OSS;
 import com.aliyun.oss.model.ObjectMetadata;
 import com.smartapply.ida.config.props.oss.AliyunOssProperties;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.net.URL;
+import java.time.Duration;
+import java.util.Date;
 import java.util.UUID;
 
 /**
@@ -88,6 +92,29 @@ public class AliyunOssStorageService {
 
     private OssUploadResult toResult(String objectKey) {
         return new OssUploadResult(properties.getBucket(), objectKey, resolvePublicUrl(objectKey));
+    }
+
+    /**
+     * 生成预签名下载 URL（GET，到期自动失效）。Bucket 必须保持<b>私有读</b>，
+     * 简历原件等隐私文件只允许通过签名 URL 访问，禁止公开直链。
+     *
+     * @param objectKey OSS 对象键
+     * @param ttl       有效期（如 {@code Duration.ofHours(1)}）
+     * @return 签名 URL；生成失败时返回 null 并告警
+     */
+    public String generatePresignedUrl(String objectKey, Duration ttl) {
+        if (!StringUtils.hasText(objectKey) || ttl == null || ttl.isNegative() || ttl.isZero()) {
+            return null;
+        }
+        try {
+            Date expiration = new Date(System.currentTimeMillis() + ttl.toMillis());
+            URL url = oss.generatePresignedUrl(properties.getBucket(), objectKey, expiration);
+            return url != null ? url.toString() : null;
+        } catch (Exception e) {
+            LoggerFactory.getLogger(getClass())
+                    .warn("生成 OSS 预签名 URL 失败 objectKey={}: {}", objectKey, e.getMessage());
+            return null;
+        }
     }
 
     private String resolvePublicUrl(String objectKey) {

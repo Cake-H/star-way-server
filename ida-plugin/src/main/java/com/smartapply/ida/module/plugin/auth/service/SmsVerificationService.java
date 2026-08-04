@@ -4,6 +4,7 @@ import com.smartapply.ida.common.exception.BusinessException;
 import com.smartapply.ida.config.props.sms.SmsVerificationProperties;
 import com.smartapply.ida.integration.sms.SmsTemplateParamJsonBuilder;
 import com.smartapply.ida.integration.sms.SmsTemplateSender;
+import com.smartapply.ida.security.mask.SensitiveDataMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -55,7 +56,7 @@ public class SmsVerificationService {
         } catch (Exception e) {
             stringRedisTemplate.delete(rateKey);
             stringRedisTemplate.delete(codeKey);
-            log.warn("短信发送失败 phone={}", normalized, e);
+            log.warn("短信发送失败 phone={}", SensitiveDataMasker.maskMiddle(normalized), e);
             throw e;
         }
     }

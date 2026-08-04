@@ -33,6 +33,17 @@ http:
     keep-alive: 300000
 
 ida:
+  crypto:
+    aes-field:
+      # 仅本地开发的固定密钥（dev 库专用，切勿用于生产；生产走 IDA_AES_FIELD_SECRET/IDA_AES_FIELD_SALT_HEX 环境变量）
+      secret: dev-only-insecure-secret-0123456789
+      salt-hex: 0123456789abcdef
+
+  http:
+    identity:
+      # 仅本地联调允许 X-User-Id 直接指定用户；生产必须为 false（默认）
+      user-id-header-enabled: true
+
   server:
     access-host: ${IDA_ACCESS_HOST:127.0.0.1}
     api-v1-prefix: /api/v1/app

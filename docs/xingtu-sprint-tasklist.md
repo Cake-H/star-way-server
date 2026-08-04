@@ -54,12 +54,12 @@
 
 简历含姓名/电话/学历/公司等敏感信息，属合规红线。
 
-- [ ] **AI 请求脱敏**：推广 `FeedbackConsumerMask`（ida-plugin 已有雏形）到全部 4 条 LLM 链路，手机号/身份证/邮箱入 prompt 前打码
-- [ ] **存储加密**：简历手机号等敏感字段 AES 加密落库（MyBatis TypeHandler 透明加解密）
-- [ ] **传输与权限**：确认全站 HTTPS；简历/OSS 文件访问必须带鉴权签名 URL，禁止公开读
-- [ ] **隐私协议 + 用户协议**页面（前端），注册勾选
-- [ ] **账号注销 + 数据删除**接口（合规要求）
-- [ ] 验收：抓包确认 LLM 请求无明文手机号；OSS 直链无法匿名访问
+- [x] **AI 请求脱敏**：推广 `FeedbackConsumerMask`（ida-plugin 已有雏形）到全部 4 条 LLM 链路，手机号/身份证/邮箱入 prompt 前打码（落地为 ida-common `SensitiveDataMasker`，占位符映射+还原，功能无损）
+- [x] **存储加密**：简历手机号等敏感字段 AES 加密落库（MyBatis TypeHandler 透明加解密；登录手机号确定性加密 + phone_tail 盲索引兼顾管理端检索）
+- [x] **传输与权限**：确认全站 HTTPS（deploy/nginx SSL 终止）；简历/OSS 文件访问必须带鉴权签名 URL，禁止公开读（预签名 URL 1h + 私有桶）
+- [x] **隐私协议 + 用户协议**页面（前端），注册勾选（后端接口 `GET /api/v1/app/agreement/{privacy|terms}` + 协议文案已备，前端页面与勾选在前端仓库实现）
+- [x] **账号注销 + 数据删除**接口（合规要求）（`DELETE /api/v1/app/user/account`，匿名化+逻辑删除+关联数据清理）
+- [ ] 验收：抓包确认 LLM 请求无明文手机号；OSS 直链无法匿名访问（验收步骤见 `docs/privacy-security-baseline.md`，待部署后人工执行）
 
 ---
 

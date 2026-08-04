@@ -37,6 +37,10 @@ public class UserIdHeaderCaptureFilter extends OncePerRequestFilter {
     }
 
     private void captureUserId(HttpServletRequest request) {
+        // 安全开关：默认关闭，防止伪造 X-User-Id 冒充任意用户；仅本地联调显式开启
+        if (!identityProperties.isUserIdHeaderEnabled()) {
+            return;
+        }
         // Bearer 已成功解析时不再读头，防止网关误传 X-User-Id 覆盖真实登录用户
         if (request.getAttribute(RequestIdentityConstants.ATTR_USER_ID) != null) {
             return;

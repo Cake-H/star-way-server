@@ -25,6 +25,7 @@ import com.smartapply.ida.module.app.billing.service.BillingService;
 import com.smartapply.ida.module.app.resume.service.AppResumeQueryService;
 import com.smartapply.ida.module.plugin.resume.autofill.PluginAutofillResultCacheService;
 import com.smartapply.ida.module.plugin.resume.autofill.ResumePreloadCacheService;
+import com.smartapply.ida.security.mask.SensitiveDataMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -236,8 +237,11 @@ public class PluginFormAutofillAiService {
                 "已序列化简历与未匹配字段（LLM 待处理控件数=" + unmatchedFields.size()
                         + "，确定性已匹配=" + detResult.getMatchedAssignments().size() + "）", 28);
 
+        // 发送 LLM 前先把简历 PII（手机号/身份证/邮箱）替换为占位符；映射仅存本次请求内存
+        SensitiveDataMasker.MaskSession maskSession = SensitiveDataMasker.mask(resumeJson);
+
         // ========== 阶段 7：调用 LangChain4j AI Service（字段少 → 推理更快） ==========
-        String userMessage = promptProvider.buildUserMessage(resumeJson, pageJson, moduleCountsJson);
+        String userMessage = promptProvider.buildUserMessage(maskSession.maskedText(), pageJson, moduleCountsJson);
 
         p.onProgress(PluginAutofillProgressPhase.CALLING_MODEL,
                 "正在调用大模型（LLM 仅处理 " + unmatchedFields.size() + " 个未匹配字段）", 38);
@@ -258,6 +262,9 @@ public class PluginFormAutofillAiService {
         if (parsed == null) {
             throw new BusinessException("模型未返回有效结果");
         }
+
+        // 隐私还原：把 LLM 输出中的 [PHONE_1] 等占位符换回真实简历值，保证填表写入的是真值
+        restorePlanPlaceholders(parsed, maskSession);
 
         // 补全 fillable（如果模型未返回）
         if (!parsed.isFillable() && parsed.getAssignments() != null && !parsed.getAssignments().isEmpty()) {
@@ -287,6 +294,37 @@ public class PluginFormAutofillAiService {
                 detResult.getMatchedAssignments().size(),
                 llmResult.getAssignments() == null ? 0 : llmResult.getAssignments().size());
         return merged;
+    }
+
+    /**
+     * 隐私还原：LLM 链路发送前用 {@link SensitiveDataMasker} 把简历 PII 替换为占位符，
+     * 这里把模型返回 plan 中 value/fallbackValues/subAssignments/hint 里的占位符还原为真实值。
+     */
+    private void restorePlanPlaceholders(PluginAutofillPlanResultVO plan, SensitiveDataMasker.MaskSession session) {
+        if (session == null || session.mapping().isEmpty()) {
+            return;
+        }
+        plan.setHint(SensitiveDataMasker.restore(plan.getHint(), session));
+        if (plan.getAssignments() != null) {
+            for (PluginFieldAssignmentDto a : plan.getAssignments()) {
+                if (a == null) {
+                    continue;
+                }
+                a.setValue(SensitiveDataMasker.restore(a.getValue(), session));
+                if (a.getFallbackValues() != null) {
+                    a.setFallbackValues(a.getFallbackValues().stream()
+                            .map(v -> SensitiveDataMasker.restore(v, session))
+                            .collect(java.util.stream.Collectors.toCollection(ArrayList::new)));
+                }
+                if (a.getSubAssignments() != null) {
+                    for (PluginSubAssignmentDto sub : a.getSubAssignments()) {
+                        if (sub != null) {
+                            sub.setValue(SensitiveDataMasker.restore(sub.getValue(), session));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**

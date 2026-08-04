@@ -41,7 +41,11 @@ public class AliyunOssProperties {
 
     /**
      * 可选：公共访问基址，例如 {@code https://your-bucket.oss-cn-hangzhou.aliyuncs.com} 或自定义域名（无尾斜杠）。
-     * 私有桶不要填，由后续「签名下载」接口提供短时 URL。
+     *
+     * @deprecated 隐私安全基线（1.4）起，简历原件一律走私有桶 +
+     * {@link com.smartapply.ida.integration.oss.AliyunOssStorageService#generatePresignedUrl(String, java.time.Duration)}
+     * 预签名 URL，不再向前端返回公开直链；本配置仅为兼容保留，请勿填写。
      */
+    @Deprecated
     private String publicBaseUrl = "";
 }

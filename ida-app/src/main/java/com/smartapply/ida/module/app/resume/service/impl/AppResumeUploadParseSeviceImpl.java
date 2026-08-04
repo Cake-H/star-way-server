@@ -13,6 +13,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -75,12 +76,15 @@ public class AppResumeUploadParseSeviceImpl implements AppResumeUploadParseServi
         // 日志不落全文，仅记录长度与 OSS 键，降低隐私泄露风险
         log.info("简历解析完成 userId={} ossKey={} plainLen={}", userId, put.objectKey(), plain.length());
 
+        // 隐私（1.4 基线）：Bucket 私有读，只向前端签发 1 小时有效的预签名 URL，禁止公开直链
+        String signedUrl = oss.generatePresignedUrl(put.objectKey(), Duration.ofHours(1));
+
         return ResumeParseResultVO.builder()
                 .originalFilename(file.getOriginalFilename())
                 .contentType(file.getContentType())
                 .ossBucket(put.bucket())
                 .ossObjectKey(put.objectKey())
-                .ossPublicUrl(put.publicUrl())
+                .ossSignedUrl(signedUrl)
                 .plainTextCharLength(plain.length())
                 .parseNotes(notes)
                 .draft(draft)

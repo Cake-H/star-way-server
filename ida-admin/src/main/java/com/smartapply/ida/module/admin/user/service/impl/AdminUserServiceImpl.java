@@ -17,6 +17,7 @@ import com.smartapply.ida.module.admin.user.service.AdminUserService;
 import com.smartapply.ida.module.app.billing.mapper.QuotaTransactionMapper;
 import com.smartapply.ida.module.app.resume.mapper.ResumeMapper;
 import com.smartapply.ida.module.app.user.mapper.UserMapper;
+import com.smartapply.ida.security.crypto.phone.PhoneCrypto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,7 +31,8 @@ import java.time.ZoneId;
  * 管理后台用户管理服务实现。
  * <p>
  * <b>隐私说明：</b>列表与详情中的手机号一律脱敏返回（前 3 后 4），
- * 后台界面不展示完整手机号；若字段启用 AES 存储加密，此处返回的即为密文截断，同样不暴露明文。
+ * 后台界面不展示完整手机号；phone 列为确定性 AES 密文，此处先解密再打码。
+ * 关键字搜索支持：完整手机号（密文等值）/ 后 4 位（盲索引 phone_tail 模糊）/ 用户 ID。
  */
 @Slf4j
 @Service
@@ -45,6 +47,7 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final ResumeMapper resumeMapper;
     private final QuotaTransactionMapper quotaTransactionMapper;
     private final UsageStatisticsMapper usageStatisticsMapper;
+    private final PhoneCrypto phoneCrypto;
 
     @Override
     public PageVO<AdminUserListItemVO> pageUsers(long page, long size, String keyword, Integer status) {
@@ -54,9 +57,20 @@ public class AdminUserServiceImpl implements AdminUserService {
         LambdaQueryWrapper<UserEntity> qw = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(keyword)) {
             String kw = keyword.trim();
-            // 关键字同时支持手机号模糊与用户 ID 精确匹配
-            qw.and(w -> w.like(UserEntity::getPhone, kw)
-                    .or().eq(UserEntity::getId, parseLongOrNull(kw)));
+            Long userId = parseLongOrNull(kw);
+            if (kw.matches("\\d+")) {
+                // phone 列为确定性 AES 密文，无法 LIKE。盲索引方案：
+                // 11 位 → 密文等值（全号精确）；任意数字 → 尾号盲索引模糊 + 用户 ID 精确
+                qw.and(w -> {
+                    w.like(UserEntity::getPhoneTail, kw).or().eq(UserEntity::getId, userId);
+                    if (kw.length() == 11) {
+                        w.or().eq(UserEntity::getPhone, phoneCrypto.encrypt(kw));
+                    }
+                });
+            } else {
+                // 非数字关键字不可能命中手机号/尾号，仅按用户 ID 精确匹配
+                qw.eq(UserEntity::getId, userId);
+            }
         }
         if (status != null) {
             qw.eq(UserEntity::getStatus, status);
@@ -149,12 +163,22 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .build();
     }
 
-    /** 手机号脱敏：保留前 3 后 4，中间打码；异常长度/空值统一返回 **** */
+    /** 手机号脱敏：密文先解密（解密失败按明文兼容），再保留前 3 后 4；异常长度/空值统一返回 **** */
     private String maskPhone(String phone) {
-        if (phone == null || phone.length() < 7) {
+        if (phone == null || phone.isBlank()) {
             return "****";
         }
-        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
+        String plain = phone;
+        try {
+            plain = phoneCrypto.decrypt(phone);
+        } catch (Exception e) {
+            // 存量明文/未开启加密：按原文继续脱敏
+            log.debug("手机号解密失败按原文脱敏: {}", e.getMessage());
+        }
+        if (plain == null || plain.length() < 7) {
+            return "****";
+        }
+        return plain.substring(0, 3) + "****" + plain.substring(plain.length() - 4);
     }
 
     /** 关键字可解析为数字时返回 Long（用于按用户 ID 精确匹配），否则返回 null 不参与条件 */

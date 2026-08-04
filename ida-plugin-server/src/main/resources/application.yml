@@ -48,6 +48,7 @@ knife4j:
 # -------------------- IDA 公共业务配置 --------------------
 ida:
   cors:
+    # 安全：生产环境必须收敛为具体域名/扩展 ID（如 https://app.example.com、chrome-extension://xxx），禁止长期 "*"
     allowed-origin-patterns:
       - "*"
     exposed-headers: []
@@ -73,7 +74,7 @@ ida:
     bcrypt:
       strength: 10
     aes-field:
-      enabled: false
+      enabled: true
       secret: ${IDA_AES_FIELD_SECRET:}
       salt-hex: ${IDA_AES_FIELD_SALT_HEX:}
 

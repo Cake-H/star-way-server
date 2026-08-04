@@ -8,10 +8,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.smartapply.ida.common.mybatis.IdaTableLogic;
+import com.smartapply.ida.security.crypto.mybatis.AesStringTypeHandler;
 /**
  * 简历主表(Resume)表实体类
  *
@@ -22,7 +24,7 @@ import com.smartapply.ida.common.mybatis.IdaTableLogic;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@TableName("ida_resume")
+@TableName(value = "ida_resume", autoResultMap = true)
 public class Resume {
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -32,7 +34,8 @@ public class Resume {
     private String title;
     //默认简历，业务层保证每用户至多一条为1    
     private Integer isDefault;
-    //姓名    
+    //姓名（AES 加密落库）
+    @TableField(typeHandler = AesStringTypeHandler.class)
     private String fullName;
     //0未知 1男 2女    
     private Integer gender;
@@ -40,15 +43,20 @@ public class Resume {
     private Date birthDate;
     //证件类型：身份证/护照等    
     private String idDocType;
-    //证件号码（强敏感，务必加密）    
+    //证件号码（强敏感，AES 加密落库）
+    @TableField(typeHandler = AesStringTypeHandler.class)
     private String idDocNumber;
-    //手机（加密）    
+    //手机（AES 加密落库）
+    @TableField(typeHandler = AesStringTypeHandler.class)
     private String phone;
-    //邮箱（加密）    
+    //邮箱（AES 加密落库）
+    @TableField(typeHandler = AesStringTypeHandler.class)
     private String email;
-    //QQ（腾讯系网申常见）    
+    //QQ（腾讯系网申常见，AES 加密落库）
+    @TableField(typeHandler = AesStringTypeHandler.class)
     private String qq;
-    //微信号    
+    //微信号（AES 加密落库）
+    @TableField(typeHandler = AesStringTypeHandler.class)
     private String wechat;
     //证件照/头像 URL    
     private String photoUrl;
@@ -70,15 +78,19 @@ public class Resume {
     private String district;
     //现居城市合并展示（冗余便于搜索/填充）    
     private String currentCity;
-    //详细通讯地址    
+    //详细通讯地址（AES 加密落库）
+    @TableField(typeHandler = AesStringTypeHandler.class)
     private String detailAddress;
     //邮寄地址同现居    
     private Integer mailingSameAsCurrent;
-    //邮寄地址（部分校招表单独要）    
+    //邮寄地址（部分校招表单独要，AES 加密落库）
+    @TableField(typeHandler = AesStringTypeHandler.class)
     private String mailingAddress;
-    //紧急联系人姓名    
+    //紧急联系人姓名（AES 加密落库）
+    @TableField(typeHandler = AesStringTypeHandler.class)
     private String emergencyContactName;
-    //紧急联系人电话（加密）    
+    //紧急联系人电话（AES 加密落库）
+    @TableField(typeHandler = AesStringTypeHandler.class)
     private String emergencyContactPhone;
     //与本人关系    
     private String emergencyContactRelation;

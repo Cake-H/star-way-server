@@ -1,5 +1,6 @@
 package com.smartapply.ida.integration.sms;
 
+import com.smartapply.ida.security.mask.SensitiveDataMasker;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -11,6 +12,6 @@ public class LoggingSmsTemplateSender implements SmsTemplateSender {
     @Override
     public void sendVerificationCode(String phone, String templateParamJson) {
         // WARN 级别便于在默认日志级别下看到验证码；生产切勿将 enabled=false 误部署到线上
-        log.warn("[DEV] 模拟发送短信 phone={} param={}", phone, templateParamJson);
+        log.warn("[DEV] 模拟发送短信 phone={} param={}", SensitiveDataMasker.maskMiddle(phone), templateParamJson);
     }
 }

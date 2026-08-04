@@ -65,6 +65,8 @@ public class UserAuthServiceImpl implements UserAuthService {
             // 首次登录：插入用户，phone 存密文（或 NoOp 明文，取决于 ida.crypto.aes-field）
             user = new UserEntity();
             user.setPhone(encPhone);
+            // 盲索引：后 4 位明文，供管理端在密文之上做尾号检索
+            user.setPhoneTail(tail4(normalized));
             user.setStatus(1);
             user.setCreatedAt(now);
             user.setUpdatedAt(now);
@@ -73,6 +75,10 @@ public class UserAuthServiceImpl implements UserAuthService {
         } else {
             if (user.getStatus() != null && user.getStatus() == 0) {
                 throw new BusinessException("账号已禁用");
+            }
+            // 存量用户懒回填尾号盲索引
+            if (!StringUtils.hasText(user.getPhoneTail())) {
+                user.setPhoneTail(tail4(normalized));
             }
             // 已存在用户：轻量 touch updatedAt，便于运营按活跃排序（可按需去掉）
             user.setUpdatedAt(now);
@@ -104,5 +110,10 @@ public class UserAuthServiceImpl implements UserAuthService {
             return null;
         }
         return raw.substring(prefix.length()).trim();
+    }
+
+    /** 手机号后 4 位（盲索引）；不足 4 位原样返回 */
+    private static String tail4(String phone) {
+        return phone.length() >= 4 ? phone.substring(phone.length() - 4) : phone;
     }
 }

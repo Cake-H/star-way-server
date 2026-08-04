@@ -18,6 +18,14 @@ public class HttpIdentityProperties {
     private String userIdHeader = "X-User-Id";
 
     /**
+     * 是否允许通过 {@link #userIdHeader} 请求头直接指定用户 id（调试/网关注入场景）。
+     * <p>
+     * <b>安全：</b>默认 false。生产环境必须为 false——否则任何人带上 {@code X-User-Id}
+     * 即可冒充任意用户。仅本地联调时可显式开启。
+     */
+    private boolean userIdHeaderEnabled = false;
+
+    /**
      * 可选：链路追踪或设备 id，仅占位，供后续过滤器使用。
      */
     private String requestIdHeader = "X-Request-Id";

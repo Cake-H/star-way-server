@@ -5,6 +5,7 @@ import com.smartapply.ida.ai.plugin.site.PageUrlUtils;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillFeedback;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillFeedbackRequest;
 import com.smartapply.ida.module.app.plugin.mapper.PluginAutofillFeedbackMapper;
+import com.smartapply.ida.security.mask.SensitiveDataMasker;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +17,6 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 
 /**
  * 自动填表反馈消费器：定时从 Redis List {@code ida:plugin:autofill:feedback:queue} 批量取出反馈，
@@ -42,10 +42,6 @@ public class PluginAutofillFeedbackConsumer {
 
     /** actualValue 入库前截断长度 */
     private static final int ACTUAL_VALUE_MAX_LEN = 64;
-
-    /** 手机号：11 位数字（前后不能紧跟数字，避免误匹配身份证号子串）；身份证号：17 位数字+1 位数字/X */
-    private static final Pattern PHONE_PATTERN = Pattern.compile("(?<!\\d)\\d{11}(?!\\d)");
-    private static final Pattern ID_CARD_PATTERN = Pattern.compile("(?<!\\d)\\d{17}[\\dXx](?!\\d)");
 
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
@@ -150,27 +146,12 @@ public class PluginAutofillFeedbackConsumer {
         }
     }
 
-    /** actualValue 脱敏：先掩码身份证号（更长，优先匹配），再掩码手机号，最后截断到 64 字符 */
+    /** actualValue 脱敏：身份证（优先）/手机号/邮箱掩码（复用公共组件），最后截断到 64 字符 */
     static String maskAndTruncate(String raw) {
         if (!StringUtils.hasText(raw)) {
             return "";
         }
-        String s = raw.trim();
-        s = ID_CARD_PATTERN.matcher(s).replaceAll(m -> maskMiddle(m.group(), 3, 4));
-        s = PHONE_PATTERN.matcher(s).replaceAll(m -> maskMiddle(m.group(), 3, 4));
-        return truncate(s, ACTUAL_VALUE_MAX_LEN);
-    }
-
-    private static String maskMiddle(String s, int prefix, int suffix) {
-        if (s.length() <= prefix + suffix) {
-            return s;
-        }
-        StringBuilder sb = new StringBuilder(s.substring(0, prefix));
-        for (int i = 0; i < s.length() - prefix - suffix; i++) {
-            sb.append('*');
-        }
-        sb.append(s.substring(s.length() - suffix));
-        return sb.toString();
+        return truncate(SensitiveDataMasker.maskSensitive(raw.trim()), ACTUAL_VALUE_MAX_LEN);
     }
 
     private static String sanitize(String s) {

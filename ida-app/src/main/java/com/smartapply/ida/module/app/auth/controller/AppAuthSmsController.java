@@ -7,6 +7,7 @@ import com.smartapply.ida.common.domain.auth.vo.SmsLoginResultVO;
 import com.smartapply.ida.constant.ApiRouteConstants;
 import com.smartapply.ida.http.annotation.NoNeedLogin;
 import com.smartapply.ida.module.app.auth.service.UserAuthService;
+import com.smartapply.ida.security.mask.SensitiveDataMasker;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,7 +40,7 @@ public class AppAuthSmsController {
     @Operation(summary = "发送登录短信验证码（JSON 或 text/plain 的 JSON 体）")
     @PostMapping(value = "/send-code", consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.TEXT_PLAIN_VALUE})
     public ResponseDTO<String> sendCode(@Valid @RequestBody SmsSendCodeForm form) {
-        log.info("收到请求 /send-code ：发送登录短信验证码，phone={}", form.getPhone());
+        log.info("收到请求 /send-code ：发送登录短信验证码，phone={}", SensitiveDataMasker.maskMiddle(form.getPhone()));
         userAuthService.sendLoginCode(form.getPhone());
         return ResponseDTO.ok();
     }
@@ -52,7 +53,7 @@ public class AppAuthSmsController {
             @NotBlank(message = "手机号不能为空")
             @Pattern(regexp = "^1[3-9]\\d{9}$", message = "请输入合法的中国大陆手机号")
             String phone) {
-        log.info("收到请求 /send-code(form-data) ：发送登录短信验证码，phone={}", phone);
+        log.info("收到请求 /send-code(form-data) ：发送登录短信验证码，phone={}", SensitiveDataMasker.maskMiddle(phone));
         userAuthService.sendLoginCode(phone);
         return ResponseDTO.ok();
     }
@@ -61,7 +62,7 @@ public class AppAuthSmsController {
     @Operation(summary = "短信验证码登录（未注册自动注册）")
     @PostMapping("/login")
     public ResponseDTO<SmsLoginResultVO> login(@Valid @RequestBody SmsLoginForm form) {
-        log.info("收到请求 /login ：短信验证码登录，phone={}", form.getPhone());
+        log.info("收到请求 /login ：短信验证码登录，phone={}", SensitiveDataMasker.maskMiddle(form.getPhone()));
         // 事务与验码在 Service 内；此处仅包装为 ResponseDTO
         return ResponseDTO.ok(userAuthService.loginBySms(form.getPhone(), form.getCode()));
     }

@@ -43,6 +43,7 @@ knife4j:
 # -------------------- IDA 公共业务配置 --------------------
 ida:
   cors:
+    # 安全：生产环境必须收敛为具体域名/扩展 ID（如 https://app.example.com、chrome-extension://xxx），禁止长期 "*"
     allowed-origin-patterns:
       - "*"
     exposed-headers: []
@@ -66,3 +67,10 @@ ida:
       # 登录防爆破：连续失败次数上限与锁定时长（秒）
       login-max-fail-count: 5
       login-lock-seconds: 600
+
+  # 字段级 AES 加密（管理端需解密用户手机号后脱敏展示；与 C 端共用同一密钥）
+  crypto:
+    aes-field:
+      enabled: true
+      secret: ${IDA_AES_FIELD_SECRET:}
+      salt-hex: ${IDA_AES_FIELD_SALT_HEX:}
