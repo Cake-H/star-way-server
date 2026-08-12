@@ -1,8 +1,9 @@
 # ============================================================
 # 多阶段 Docker 构建 — Maven 多模块 Spring Boot 项目
-# 支持两个可执行服务：
+# 支持三个可执行服务：
 #   docker build --build-arg MODULE=ida-app-server    -t ida-app-server .
 #   docker build --build-arg MODULE=ida-plugin-server -t ida-plugin-server .
+#   docker build --build-arg MODULE=ida-admin-server  -t ida-admin-server .
 # 默认构建 ida-app-server
 # ============================================================
 
@@ -19,8 +20,10 @@ COPY ida-common/pom.xml     ida-common/pom.xml
 COPY ida-ai/pom.xml         ida-ai/pom.xml
 COPY ida-app/pom.xml        ida-app/pom.xml
 COPY ida-plugin/pom.xml     ida-plugin/pom.xml
+COPY ida-admin/pom.xml      ida-admin/pom.xml
 COPY ida-app-server/pom.xml ida-app-server/pom.xml
 COPY ida-plugin-server/pom.xml ida-plugin-server/pom.xml
+COPY ida-admin-server/pom.xml  ida-admin-server/pom.xml
 
 # 下载依赖（此时源码尚未复制，依赖有缓存）
 RUN mvn dependency:go-offline -pl ${MODULE} -am -B -q || true
@@ -50,7 +53,8 @@ COPY --from=builder /build/${MODULE}/target/*.jar app.jar
 # 根据模块暴露不同端口
 # ida-app-server    默认 8088
 # ida-plugin-server 默认 8089
-EXPOSE 8088 8089
+# ida-admin-server  默认 8090
+EXPOSE 8088 8089 8090
 
 USER appuser
 

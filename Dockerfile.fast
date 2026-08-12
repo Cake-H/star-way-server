@@ -3,6 +3,7 @@
 # 使用方式：
 #   1. mvn package -pl ida-app-server -am -DskipTests -q
 #   2. docker build -f Dockerfile.fast --build-arg MODULE=ida-app-server -t 镜像名 .
+# MODULE 取值：ida-app-server（8088）/ ida-plugin-server（8089）/ ida-admin-server（8090）
 # ============================================================
 
 FROM crpi-57bx5zcp97h0pj85.cn-guangzhou.personal.cr.aliyuncs.com/cakeh/eclipse-temurin:17-jre-alpine
@@ -19,7 +20,7 @@ WORKDIR /app
 # 直接复制本地已构建好的 JAR（跳过 Docker 内 Maven 编译 ~200s）
 COPY ${MODULE}/target/*.jar app.jar
 
-EXPOSE 8088 8089
+EXPOSE 8088 8089 8090
 
 USER appuser
 

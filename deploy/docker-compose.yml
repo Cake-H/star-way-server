@@ -126,6 +126,47 @@ services:
         max-size: "50m"
         max-file: "10"
 
+  # ==================== Admin 服务（管理后台） ====================
+  ida-admin-server:
+    image: ${ACR_REGISTRY}/${ACR_NAMESPACE}/ida-admin-server:latest
+    container_name: ida-admin-server
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_SERVER_PORT:-8090}:8090"
+    environment:
+      # --- Spring ---
+      SPRING_PROFILES_ACTIVE: prod
+      ADMIN_SERVER_PORT: "8090"
+      # --- 数据库 ---
+      MYSQL_HOST: ${MYSQL_HOST}
+      MYSQL_PORT: "${MYSQL_PORT:-3306}"
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      # --- Redis ---
+      IDA_REDIS_HOST: ${IDA_REDIS_HOST}
+      IDA_REDIS_PORT: "${IDA_REDIS_PORT:-6379}"
+      IDA_REDIS_PASSWORD: ${IDA_REDIS_PASSWORD}
+      IDA_ADMIN_REDIS_DB: "${IDA_ADMIN_REDIS_DB:-2}"
+      # --- 访问域名/IP（仅用于启动后打印访问地址） ---
+      IDA_ACCESS_HOST: ${IDA_ACCESS_HOST}
+      # --- AES 字段加密（与 app/plugin 同一套密钥，解密展示用户数据时需要） ---
+      IDA_AES_FIELD_SECRET: ${IDA_AES_FIELD_SECRET}
+      IDA_AES_FIELD_SALT_HEX: ${IDA_AES_FIELD_SALT_HEX}
+    networks:
+      - ida-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "10"
+
   # ==================== Nginx（HTTPS 终止 + 反代，隐私安全基线） ====================
   nginx:
     image: nginx:1.25-alpine
