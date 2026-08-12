@@ -1,5 +1,6 @@
 package com.smartapply.ida.ai.plugin.site;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginPageFormFieldDto;
 import com.smartapply.ida.common.domain.plugin.autofill.site.FieldAnchor;
 import com.smartapply.ida.common.domain.plugin.autofill.site.SiteTemplate;
@@ -81,9 +82,46 @@ class SiteTemplateMatcherTest {
         SiteTemplateMatchResult result = matcher.apply(tpl, List.of(field), draft());
 
         assertThat(result.getBlockedFields()).hasSize(1);
+        // 未配置 blockedReason/blockedHint 时使用默认值
         assertThat(result.getBlockedFields().get(0).getReason()).isEqualTo("other");
+        assertThat(result.getBlockedFields().get(0).getUserHint()).isEqualTo("模板标注需人工处理");
         assertThat(result.getUnmatchedFields()).isEmpty();
         assertThat(result.getMatchedAssignments()).isEmpty();
+    }
+
+    @Test
+    void shouldUseMappingBlockedReasonAndHintForSkipField() {
+        SiteTemplate tpl = template(List.of(
+                TemplateFieldMapping.builder()
+                        .anchor(FieldAnchor.builder().labelTextEquals("工号").build())
+                        .skip(true)
+                        .blockedReason("readonly")
+                        .blockedHint("该字段为只读，请人工确认")
+                        .build()
+        ));
+        PluginPageFormFieldDto field = field("#emp_no", "工号", null, null, null);
+
+        SiteTemplateMatchResult result = matcher.apply(tpl, List.of(field), draft());
+
+        assertThat(result.getBlockedFields()).hasSize(1);
+        assertThat(result.getBlockedFields().get(0).getReason()).isEqualTo("readonly");
+        assertThat(result.getBlockedFields().get(0).getUserHint()).isEqualTo("该字段为只读，请人工确认");
+    }
+
+    @Test
+    void shouldOutputBlockedReasonAndHintFromRealBeisenTemplate() throws Exception {
+        SiteTemplate beisen;
+        try (var in = getClass().getResourceAsStream("/site-templates/beisen.json")) {
+            beisen = new ObjectMapper().readValue(in, SiteTemplate.class);
+        }
+        PluginPageFormFieldDto field = field("#resume_upload", "附件", null, null, null);
+
+        SiteTemplateMatchResult result = matcher.apply(beisen, List.of(field), draft());
+
+        assertThat(result.getBlockedFields()).hasSize(1);
+        // beisen 附件行 blockedReason=attachment，Matcher 透传不被下游改写
+        assertThat(result.getBlockedFields().get(0).getReason()).isEqualTo("attachment");
+        assertThat(result.getBlockedFields().get(0).getUserHint()).isEqualTo("附件需人工上传");
     }
 
     @Test

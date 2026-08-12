@@ -1,5 +1,7 @@
 # 一键填表体验增强 — 扩展端适配说明
 
+> ⚠️ **本文档部分内容为旧版约定**（API 摘要缺反馈接口等）。**最新权威对接说明见 [`plugin-autofill-frontend-integration-current.md`](./plugin-autofill-frontend-integration-current.md)**，冲突处以该文为准。
+
 格式：**问题简述 → 后端已做 → 扩展需做**。
 
 ---

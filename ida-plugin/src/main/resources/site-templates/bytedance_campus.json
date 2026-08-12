@@ -1,0 +1,70 @@
+{
+  "siteId": "bytedance_campus",
+  "displayName": "字节跳动校招（jobs.bytedance.com，基于 2026-08 真实快照校准）",
+  "priority": 100,
+  "fingerprints": [
+    {
+      "urlHostSuffix": "jobs.bytedance.com"
+    }
+  ],
+  "fieldMappings": [
+    {
+      "anchor": { "i18nLabelEquals": "姓名" },
+      "resumePath": "basic.fullName"
+    },
+    {
+      "anchor": { "dataFormFieldIdEquals": "email" },
+      "resumePath": "basic.email"
+    },
+    {
+      "anchor": { "dataFormFieldIdEquals": "school" },
+      "resumePath": "education.0.schoolName"
+    },
+    {
+      "anchor": { "i18nLabelEquals": "学院" },
+      "resumePath": "education.0.collegeName"
+    },
+    {
+      "anchor": { "dataFormFieldIdEquals": "field_of_study" },
+      "resumePath": "education.0.major"
+    },
+    {
+      "anchor": { "i18nLabelEquals": "实验室" },
+      "skip": true,
+      "blockedReason": "no_mapping",
+      "blockedHint": "简历中未提供实验室信息，请手动填写"
+    },
+    {
+      "anchor": { "i18nLabelEquals": "领域方向" },
+      "skip": true,
+      "blockedReason": "no_mapping",
+      "blockedHint": "简历中未提供领域方向信息，请手动填写"
+    },
+    {
+      "anchor": { "i18nLabelEquals": "导师" },
+      "skip": true,
+      "blockedReason": "no_mapping",
+      "blockedHint": "简历中未提供导师信息，请手动填写"
+    },
+    {
+      "anchor": { "dataFormFieldIdEquals": "company" },
+      "resumePath": "work.0.companyName"
+    },
+    {
+      "anchor": { "dataFormFieldIdEquals": "title" },
+      "resumePath": "work.0.jobTitle"
+    },
+    {
+      "anchor": { "i18nLabelEquals": "项目名称" },
+      "resumePath": "project.0.projectName"
+    },
+    {
+      "anchor": { "dataFormFieldIdEquals": "role" },
+      "resumePath": "project.0.roleName"
+    },
+    {
+      "anchor": { "dataFormFieldIdEquals": "link" },
+      "resumePath": "project.0.projectUrl"
+    }
+  ]
+}

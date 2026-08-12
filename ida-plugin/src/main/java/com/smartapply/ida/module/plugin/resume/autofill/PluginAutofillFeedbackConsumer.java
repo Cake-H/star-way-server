@@ -89,7 +89,7 @@ public class PluginAutofillFeedbackConsumer {
     /**
      * 每天清理 90 天前的反馈明细，避免表无限膨胀。cron 非整点，错峰。
      */
-    @Scheduled(cron = "${ida.plugin.autofill.feedback.purge-cron:17 3 * * *}")
+    @Scheduled(cron = "${ida.plugin.autofill.feedback.purge-cron:0 17 3 * * *}")
     public void purgeOld() {
         try {
             LocalDateTime threshold = LocalDateTime.now().minusDays(RETAIN_DAYS);

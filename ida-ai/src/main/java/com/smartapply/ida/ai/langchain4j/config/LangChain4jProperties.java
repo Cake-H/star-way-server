@@ -70,6 +70,22 @@ public class LangChain4jProperties {
          * 是否启用 JSON 模式。
          */
         private boolean responseFormatJsonObject = true;
+
+        /**
+         * 是否打印模型原始请求体日志（排查用，含完整 prompt，体积大，仅排障时开启）。
+         */
+        private boolean logRequests = false;
+
+        /**
+         * 是否打印模型原始响应日志（排查解析失败/截断时开启，可看 finish_reason 与原始内容）。
+         */
+        private boolean logResponses = false;
+
+        /**
+         * 透传给网关的自定义请求参数（OpenAI 兼容协议的扩展字段，原样并入请求体）。
+         * 例如关闭推理模型的思考：{@code thinking: {type: disabled}}（火山方舟/DeepSeek 网关）。
+         */
+        private java.util.Map<String, Object> customParameters;
     }
 
     /**

@@ -5,9 +5,6 @@
   "fingerprints": [
     {
       "urlHostSuffix": "beisen.com"
-    },
-    {
-      "urlHostSuffix": "yingjiesheng.com"
     }
   ],
   "fieldMappings": [
@@ -51,7 +48,7 @@
       "resumePath": "location.nativePlace"
     },
     {
-      "anchor": { "labelTextEquals": "学校" },
+      "anchor": { "labelTextEquals": "学校名称" },
       "resumePath": "education.0.schoolName"
     },
     {
@@ -64,11 +61,11 @@
       "enumCategory": "degree"
     },
     {
-      "anchor": { "labelTextEquals": "入学时间" },
+      "anchor": { "labelTextEquals": "开始时间" },
       "resumePath": "education.0.enrollDate"
     },
     {
-      "anchor": { "labelTextEquals": "毕业时间" },
+      "anchor": { "labelTextEquals": "结束时间" },
       "resumePath": "education.0.graduateDate"
     },
     {
@@ -81,7 +78,9 @@
     },
     {
       "anchor": { "labelTextEquals": "附件", "selectorContains": "upload" },
-      "skip": true
+      "skip": true,
+      "blockedReason": "attachment",
+      "blockedHint": "附件需人工上传"
     }
   ]
 }

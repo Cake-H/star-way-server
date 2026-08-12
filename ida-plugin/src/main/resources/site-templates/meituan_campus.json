@@ -1,0 +1,117 @@
+{
+  "siteId": "meituan_campus",
+  "displayName": "美团校招（zhaopin.meituan.com，基于 2026-08 真实快照校准；该站无 dataFormFieldId，锚点用 labelText）",
+  "priority": 100,
+  "fingerprints": [
+    {
+      "urlHostSuffix": "zhaopin.meituan.com"
+    }
+  ],
+  "fieldMappings": [
+    {
+      "anchor": { "labelTextEquals": "姓名" },
+      "resumePath": "basic.fullName"
+    },
+    {
+      "anchor": { "labelTextEquals": "邮箱" },
+      "resumePath": "basic.email"
+    },
+    {
+      "anchor": { "labelTextEquals": "请输入证件号码" },
+      "resumePath": "basic.idDocNumber"
+    },
+    {
+      "anchor": { "labelTextEquals": "当前居住城市" },
+      "resumePath": "location.currentCity"
+    },
+    {
+      "anchor": { "labelTextEquals": "学校名称" },
+      "resumePath": "education.0.schoolName"
+    },
+    {
+      "anchor": { "labelTextEquals": "学院名称" },
+      "resumePath": "education.0.collegeName"
+    },
+    {
+      "anchor": { "labelTextEquals": "专业名称" },
+      "resumePath": "education.0.major"
+    },
+    {
+      "anchor": { "labelTextEquals": "学历" },
+      "resumePath": "education.0.degree",
+      "enumCategory": "degree"
+    },
+    {
+      "anchor": { "labelTextEquals": "成绩排名" },
+      "resumePath": "education.0.rankingDesc"
+    },
+    {
+      "anchor": { "labelTextEquals": "实验室" },
+      "skip": true,
+      "blockedReason": "no_mapping",
+      "blockedHint": "简历中未提供实验室信息，请手动填写"
+    },
+    {
+      "anchor": { "labelTextEquals": "请输入实验室" },
+      "skip": true,
+      "blockedReason": "no_mapping",
+      "blockedHint": "简历中未提供实验室信息，请手动填写"
+    },
+    {
+      "anchor": { "labelTextEquals": "导师" },
+      "skip": true,
+      "blockedReason": "no_mapping",
+      "blockedHint": "简历中未提供导师信息，请手动填写"
+    },
+    {
+      "anchor": { "labelTextEquals": "研究方向" },
+      "skip": true,
+      "blockedReason": "no_mapping",
+      "blockedHint": "简历中未提供研究方向信息，请手动填写"
+    },
+    {
+      "anchor": { "labelTextEquals": "语言类型" },
+      "resumePath": "language.0.languageName"
+    },
+    {
+      "anchor": { "labelTextEquals": "公司名称" },
+      "resumePath": "work.0.companyName"
+    },
+    {
+      "anchor": { "labelTextEquals": "部门名称" },
+      "resumePath": "work.0.department"
+    },
+    {
+      "anchor": { "labelTextEquals": "职位名称" },
+      "resumePath": "work.0.jobTitle"
+    },
+    {
+      "anchor": { "labelTextEquals": "工作类型" },
+      "resumePath": "work.0.employmentNature"
+    },
+    {
+      "anchor": { "labelTextEquals": "项目名称" },
+      "resumePath": "project.0.projectName"
+    },
+    {
+      "anchor": { "labelTextEquals": "项目角色" },
+      "resumePath": "project.0.roleName"
+    },
+    {
+      "anchor": { "labelTextEquals": "项目链接" },
+      "resumePath": "project.0.projectUrl"
+    },
+    {
+      "anchor": { "labelTextEquals": "校园经历名称" },
+      "resumePath": "campus.0.organizationName"
+    },
+    {
+      "anchor": { "labelTextEquals": "角色" },
+      "resumePath": "campus.0.roleTitle"
+    },
+    {
+      "anchor": { "labelTextEquals": "证书名称" },
+      "resumePath": "certificate.0.certName"
+    }
+  ]
+}

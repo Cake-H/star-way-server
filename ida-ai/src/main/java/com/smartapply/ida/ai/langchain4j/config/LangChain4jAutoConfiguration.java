@@ -6,6 +6,7 @@ import com.smartapply.ida.ai.langchain4j.assistant.PluginAutofillAssistant;
 import com.smartapply.ida.ai.langchain4j.assistant.ResumeParseAssistant;
 import com.smartapply.ida.ai.usage.TokenUsageCaptureListener;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.openai.OpenAiChatRequestParameters;
 import dev.langchain4j.service.AiServices;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -66,7 +67,7 @@ public class LangChain4jAutoConfiguration {
             @Qualifier("pluginAutofillChatModel") OpenAiChatModel chatModel) {
         log.info("[LangChain4j] 创建 PluginAutofillAssistant");
         return AiServices.builder(PluginAutofillAssistant.class)
-                .chatLanguageModel(chatModel)
+                .chatModel(chatModel)
                 .build();
     }
 
@@ -76,7 +77,7 @@ public class LangChain4jAutoConfiguration {
             @Qualifier("interviewSummarizeChatModel") OpenAiChatModel chatModel) {
         log.info("[LangChain4j] 创建 InterviewSummarizeAssistant");
         return AiServices.builder(InterviewSummarizeAssistant.class)
-                .chatLanguageModel(chatModel)
+                .chatModel(chatModel)
                 .build();
     }
 
@@ -86,7 +87,7 @@ public class LangChain4jAutoConfiguration {
             @Qualifier("resumeParseChatModel") OpenAiChatModel chatModel) {
         log.info("[LangChain4j] 创建 ResumeParseAssistant");
         return AiServices.builder(ResumeParseAssistant.class)
-                .chatLanguageModel(chatModel)
+                .chatModel(chatModel)
                 .build();
     }
 
@@ -96,7 +97,7 @@ public class LangChain4jAutoConfiguration {
             @Qualifier("mockInterviewChatModel") OpenAiChatModel chatModel) {
         log.info("[LangChain4j] 创建 MockInterviewGenerateAssistant");
         return AiServices.builder(MockInterviewGenerateAssistant.class)
-                .chatLanguageModel(chatModel)
+                .chatModel(chatModel)
                 .build();
     }
 
@@ -126,6 +127,21 @@ public class LangChain4jAutoConfiguration {
 
         if (config.isResponseFormatJsonObject()) {
             builder.responseFormat("json_object");
+        }
+
+        if (config.isLogRequests()) {
+            builder.logRequests(true);
+        }
+        if (config.isLogResponses()) {
+            builder.logResponses(true);
+        }
+
+        // 自定义请求参数透传（如 thinking:{type:disabled} 关闭推理模型思考）；
+        // builder 上显式设置的 maxTokens/temperature/responseFormat 优先级更高，不受影响
+        if (config.getCustomParameters() != null && !config.getCustomParameters().isEmpty()) {
+            builder.defaultRequestParameters(OpenAiChatRequestParameters.builder()
+                    .customParameters(config.getCustomParameters())
+                    .build());
         }
 
         log.info("[LangChain4j] 已创建 {} ChatModel: baseUrl={}, model={}, temperature={}",

@@ -2,6 +2,7 @@ package com.smartapply.ida.module.plugin.resume.autofill;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartapply.ida.common.constant.PluginCacheConstants;
 import com.smartapply.ida.common.domain.resume.vo.ResumeDetailVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +16,8 @@ import java.time.Duration;
  * 将已查出的简历详情预热到 Redis，后续 planAutofill 直接从 Redis 读取，跳过 DB 查询。
  * <p>
  * TTL = 10 分钟，覆盖用户从打开页面到触发填表的典型时间窗口。
+ * 简历写路径（ida-app 保存/更新/删除、账号注销）会经 {@link PluginCacheConstants}
+ * 按同一键直接删 Redis 主动失效（本类不提供失效方法），窗口期内的修改不会让 planAutofill 读到旧 draft。
  * Redis 不可用时静默降级——planAutofill 回退查 DB。
  */
 @Slf4j
@@ -22,7 +25,6 @@ import java.time.Duration;
 @RequiredArgsConstructor
 public class ResumePreloadCacheService {
 
-    private static final String KEY_PREFIX = "ida:plugin:resume:preload:";
     private static final Duration TTL = Duration.ofMinutes(10);
 
     private final StringRedisTemplate stringRedisTemplate;
@@ -63,6 +65,6 @@ public class ResumePreloadCacheService {
     }
 
     private String buildKey(Long userId, Long resumeId) {
-        return KEY_PREFIX + userId + ":" + resumeId;
+        return PluginCacheConstants.resumePreloadKey(userId, resumeId);
     }
 }

@@ -1,11 +1,15 @@
 package com.smartapply.ida.ai.plugin.site;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartapply.ida.ai.plugin.deterministic.ChineseFieldAliasTable;
+import com.smartapply.ida.ai.plugin.deterministic.ResumeFieldAccessor;
+import com.smartapply.ida.common.domain.plugin.autofill.BlockedFieldReasons;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginPageFormFieldDto;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginPageFormSnapshotDto;
 import com.smartapply.ida.common.domain.plugin.autofill.site.FieldAnchor;
 import com.smartapply.ida.common.domain.plugin.autofill.site.SiteFingerprint;
 import com.smartapply.ida.common.domain.plugin.autofill.site.SiteTemplate;
+import com.smartapply.ida.common.domain.plugin.autofill.site.TemplateFieldMapping;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +29,8 @@ import java.util.regex.Pattern;
  * 站点模板注册表：启动时从 classpath {@code site-templates/*.json} 加载全部模板，
  * 运行时按 {@link #match(PluginPageFormSnapshotDto)} 选出命中的模板。
  * <p>
- * 加载失败仅告警并跳过该文件，不阻断启动；无任何模板时 {@link #match} 恒返回 empty。
+ * 解析失败仅告警并跳过该文件，不阻断启动；字段映射校验（resumePath / enumCategory 合法性）
+ * 失败的模板会被拒绝加载并 log.error 记录原因，不影响其他模板；无任何模板时 {@link #match} 恒返回 empty。
  */
 @Slf4j
 @Component
@@ -53,6 +58,12 @@ public class SiteTemplateRegistry {
                 try {
                     SiteTemplate t = objectMapper.readValue(res.getInputStream(), SiteTemplate.class);
                     if (t != null && StringUtils.hasText(t.getSiteId())) {
+                        String error = validateTemplate(t);
+                        if (error != null) {
+                            // 校验失败拒绝加载该模板（log.error 便于告警），不影响其他模板
+                            log.error("[站点模板] {} 校验失败，拒绝加载 (siteId={}): {}", name, t.getSiteId(), error);
+                            continue;
+                        }
                         loaded.add(t);
                         log.info("[站点模板] 已加载 {} (siteId={}, 字段映射数={})",
                                 name, t.getSiteId(),
@@ -98,6 +109,44 @@ public class SiteTemplateRegistry {
     /** 当前已加载模板数量，供测试与诊断使用 */
     public int size() {
         return templates.size();
+    }
+
+    /**
+     * 校验模板字段映射的合法性，防止运营写错模板直接上生产（金标误填风险）。
+     * 规则：
+     * <ul>
+     *   <li>非 skip 行的 {@code resumePath} 必须非空且是 {@link ResumeFieldAccessor} 已知路径
+     *       （格式同 clientFieldKey：{@code basic.fullName} / {@code education.0.schoolName}）；</li>
+     *   <li>skip=true 的行不要求 {@code resumePath}，但其 {@code blockedReason} 非空时必须是
+     *       {@link BlockedFieldReasons} 白名单内的值（空=合法，默认 other）；</li>
+     *   <li>{@code enumCategory} 非空时必须是 {@link ChineseFieldAliasTable} 已注册的枚举类别。</li>
+     * </ul>
+     *
+     * @return 校验失败的错误描述；合法返回 null
+     */
+    static String validateTemplate(SiteTemplate t) {
+        if (t.getFieldMappings() == null) {
+            return null;
+        }
+        for (int i = 0; i < t.getFieldMappings().size(); i++) {
+            TemplateFieldMapping m = t.getFieldMappings().get(i);
+            if (m == null) {
+                continue;
+            }
+            String row = "fieldMappings[" + i + "]";
+            if (!m.isSkip() && !ResumeFieldAccessor.isKnownKey(m.getResumePath())) {
+                return row + " resumePath 缺失或不是已知简历字段路径: " + m.getResumePath();
+            }
+            if (m.isSkip() && StringUtils.hasText(m.getBlockedReason())
+                    && !BlockedFieldReasons.isValid(m.getBlockedReason().trim().toLowerCase())) {
+                return row + " blockedReason 不是已知 blocked 原因码: " + m.getBlockedReason();
+            }
+            if (StringUtils.hasText(m.getEnumCategory())
+                    && !ChineseFieldAliasTable.isKnownEnumCategory(m.getEnumCategory())) {
+                return row + " enumCategory 不是已知枚举类别: " + m.getEnumCategory();
+            }
+        }
+        return null;
     }
 
     private boolean matchesFingerprint(SiteFingerprint fp, PluginPageFormSnapshotDto page) {
@@ -159,12 +208,12 @@ public class SiteTemplateRegistry {
         return false;
     }
 
+    /**
+     * 委托 {@link PageUrlUtils#extractPath}（去 query/fragment、防 query 内斜杠误判）。
+     * 注意：urlPathRegex 只匹配 path 部分，不支持匹配 query 参数。
+     */
     private String extractPath(String url) {
-        String u = url.trim();
-        int scheme = u.indexOf("://");
-        int start = scheme >= 0 ? scheme + 3 : 0;
-        int slash = u.indexOf('/', start);
-        return slash > 0 ? u.substring(slash) : "/";
+        return PageUrlUtils.extractPath(url);
     }
 
     /**

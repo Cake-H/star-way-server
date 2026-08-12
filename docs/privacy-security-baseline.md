@@ -101,3 +101,12 @@
 - 语音**音频**原文会发给 ASR 服务商（阿里云 NLS / OpenAI Whisper），已在隐私政策披露；
 - ASR 之外，插件填表发给浏览器扩展的字段值为明文（功能必需，端侧使用）；
 - 插件端登录 token 与 app 端相互独立，注销时仅撤销 app 端当前 token，插件 token 随 7 天 TTL 自然过期。
+
+### 插件一键填表（M2 新增存储面，测试阶段接受，下迭代优化）
+
+> 以下 4 项是 M2 引入或暴露的明文 PII 驻留面，测试阶段评估接受，已列入下一迭代优化项（缓存 mask/restore、队列脱敏前移、日志剔除 currentValue）。
+
+- **简历预加载缓存明文**（`ResumePreloadCacheService`）：`ResumeDetailVO` 为 TypeHandler 解密后的完整简历 JSON，明文写 Redis，TTL 10 分钟；Redis 开启 RDB 持久化时明文会落磁盘。写路径（更新/删除简历、注销账号）已 afterCommit 主动失效。
+- **填表结果缓存明文**（`PluginAutofillResultCacheService`）：plan 的 value 为占位符还原后的真实值（含手机号/身份证），明文存 Redis，TTL 2 小时；缓存键含 `resumeUpdatedAtMs` 无法按用户批量删除，**注销后 PII 残留最长 2 小时**（随 TTL 自然过期）。
+- **反馈队列瞬态明文**（`PluginAutofillFeedbackService`）：`actualValue` 未脱敏先入 Redis List，消费器入库前才脱敏；正常驻留 ≤30 秒，消费器宕机期间队列会积压明文。
+- **PART_B currentValue 明文进 LLM prompt**：页面快照中用户已填的控件值（`currentValue`）随 PART_B 明文发给模型（功能上模型需参考已有值；PART_A 简历数据仍按 §一.1 全量脱敏）。同理，`PluginFormAutofillAiService` 与 `DeterministicFieldMatcher` 的诊断日志会打印 currentValue 明文（存量问题）。

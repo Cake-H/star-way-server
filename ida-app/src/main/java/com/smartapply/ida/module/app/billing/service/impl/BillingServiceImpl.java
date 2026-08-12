@@ -59,6 +59,12 @@ public class BillingServiceImpl implements BillingService {
 
     @Override
     public <T> T execute(Long userId, String bizType, Long bizId, Supplier<T> aiCall) {
+        return execute(userId, bizType, bizId, aiCall, null);
+    }
+
+    @Override
+    public <T> T execute(Long userId, String bizType, Long bizId, Supplier<T> aiCall,
+                         java.util.function.Predicate<T> settleWhen) {
         if (!properties.isEnabled()) {
             return aiCall.get();
         }
@@ -69,7 +75,12 @@ public class BillingServiceImpl implements BillingService {
         AiUsageContext.begin(userId, bizType, bizId);
         try {
             T result = aiCall.get();
-            settle(userId, bizType, bizId, AiUsageContext.current());
+            if (settleWhen == null || settleWhen.test(result)) {
+                settle(userId, bizType, bizId, AiUsageContext.current());
+            } else {
+                // 结果不可用（如模型输出无法解析）：不扣点不记用量，仅留日志
+                log.info("[计费] 结果不可结算，跳过扣点 userId={} bizType={} bizId={}", userId, bizType, bizId);
+            }
             return result;
         } finally {
             AiUsageContext.clear();

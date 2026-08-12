@@ -5,18 +5,23 @@ import org.springframework.stereotype.Component;
 /**
  * 简历解析提示词 Provider。
  * <p>
- * 提示词内容与原 {@link com.smartapply.ida.ai.resume.ResumeParsePrompts} 完全一致。
+ * 以原 ResumeParsePrompts 为基础，本类为唯一来源；M2 在 SYSTEM 中新增了
+ * 长文本字段原文保留硬约束（禁止摘要/改写/丢换行）。
  */
 @Component
 public class ResumeParsePromptProvider {
 
     /**
-     * 系统提示词：与原 ResumeParsePrompts.SYSTEM 完全一致。
+     * 系统提示词：以原 ResumeParsePrompts.SYSTEM 为基础，新增长文本原文保留硬约束。
      */
     public static final String SYSTEM = """
             你是招聘简历信息抽取助手。只根据用户给出的简历纯文本推断字段，不得编造未出现的信息。
             输出必须是单个 JSON 对象，不要 Markdown，不要代码围栏，不要注释。
             无法确定的字段用 null 或省略；日期尽量为 yyyy-MM-dd；列表无内容时用 []。
+            **长文本字段原文保留（极其重要）**：selfIntro、strengths、workDescription、dutyDescription、achievement、
+            description、majorCourses 等段落型字段必须**逐字摘录简历原文**——禁止摘要、概括、改写、润色、合并段落；
+            保留原文的全部换行（JSON 字符串中用 \\n 表示）与条目序号（如 1、2、3 或 1. 2. 等）；宁可字段很长也不得截断。
+            原文没有的字段宁缺毋滥（null），但存在的段落必须完整。
             """;
 
     /**

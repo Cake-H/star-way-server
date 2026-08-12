@@ -23,6 +23,17 @@ public interface BillingService {
     <T> T execute(Long userId, String bizType, Long bizId, Supplier<T> aiCall);
 
     /**
+     * 同 {@link #execute(Long, String, Long, Supplier)}，但仅当结果满足 {@code settleWhen} 时才结算扣点。
+     * <p>
+     * 用于「调用成功返回但结果不可用」的场景（如模型输出无法解析返回 null）：
+     * 功能未成功服务用户，不计费、不记用量。
+     *
+     * @param settleWhen 结果是否可结算的判定；为 null 视同「始终结算」
+     */
+    <T> T execute(Long userId, String bizType, Long bizId, Supplier<T> aiCall,
+                  java.util.function.Predicate<T> settleWhen);
+
+    /**
      * 懒发放每日免费额度。
      */
     void ensureDailyGrant(Long userId);

@@ -94,6 +94,11 @@ ida:
       max-tokens: 16384
       read-timeout-ms: 300000
       response-format-json-object: true
+      # 排障：打印模型原始响应（含 finish_reason，用于定位「模型未返回有效结果」），定位后改回 false
+      log-responses: true
+      # 透传给网关的自定义参数：关闭推理模型的思考（reasoning_tokens 归零，结构化任务不需要长推理）
+      custom-parameters:
+        thinking: {type: disabled}
     interview-summarize:
       model: deepseek-v4-pro
       temperature: 0.3
@@ -113,3 +118,8 @@ ida:
     tokens-per-point: 1000
     min-points-per-call: 1
     daily-free-points: 10
+
+# 排障：LangChain4j/openai4j 原始响应日志走 DEBUG 级别（配合 ida.ai.plugin-autofill.log-responses=true）
+logging:
+  level:
+    dev.ai4j.openai4j: DEBUG

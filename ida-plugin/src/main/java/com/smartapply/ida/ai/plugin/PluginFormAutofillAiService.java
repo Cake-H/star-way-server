@@ -9,6 +9,7 @@ import com.smartapply.ida.ai.plugin.deterministic.DeterministicMatchResult;
 import com.smartapply.ida.ai.plugin.site.SiteTemplateMatcher;
 import com.smartapply.ida.ai.plugin.site.SiteTemplateRegistry;
 import com.smartapply.ida.ai.usage.AiUsageBizType;
+import com.smartapply.ida.common.domain.plugin.autofill.BlockedFieldReasons;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanRequest;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanResultVO;
 import com.smartapply.ida.common.domain.plugin.autofill.site.SiteTemplate;
@@ -66,6 +67,8 @@ public class PluginFormAutofillAiService {
     private final AppResumeQueryService appResumeQueryService;
     /** 确定性字段匹配器：clientFieldKey 直接映射 + 标签启发式，覆盖 ~80% 常见字段 */
     private final DeterministicFieldMatcher deterministicFieldMatcher;
+    /** PART_A 简历 JSON 相关性裁剪器：按未匹配字段移除无关模块，降低 token 消耗（召回优先） */
+    private final ResumeDraftPromptPruner resumeDraftPromptPruner;
     /** 站点模板注册表：按 URL/锚点指纹匹配已标注的 ATS 模板，命中即走金标直填 */
     private final SiteTemplateRegistry siteTemplateRegistry;
     /** 站点模板匹配器：对命中的模板逐字段执行金标映射，产出高置信 assignment */
@@ -198,9 +201,19 @@ public class PluginFormAutofillAiService {
                             + " 未匹配=" + detResult.getUnmatchedFields().size(), 26);
         }
 
-        // ========== 阶段 5：若模板+确定性已覆盖全部字段 → 跳过 LLM ==========
-        if (detResult.getUnmatchedFields().isEmpty()) {
-            log.info("全部字段已由模板+确定性匹配覆盖，跳过 LLM userId={} resumeId={} siteId={}",
+        // ========== 阶段 5：已有值字段不进 LLM（不覆盖用户已填内容）；剩余为空则跳过 LLM ==========
+        // 模板/确定性层会把已有 currentValue 的字段归入 unmatched（它们只负责不匹配，不负责剔除），
+        // 这里在发 LLM 前统一过滤，避免模型返回覆盖用户已填内容的 assignment。
+        List<PluginPageFormFieldDto> llmFields = detResult.getUnmatchedFields().stream()
+                .filter(f -> !StringUtils.hasText(f.getCurrentValue()))
+                .toList();
+        int skippedWithValue = detResult.getUnmatchedFields().size() - llmFields.size();
+        if (skippedWithValue > 0) {
+            log.info("已有值字段不交给 LLM: 跳过={} 个（unmatched={} → LLM 待处理={}）",
+                    skippedWithValue, detResult.getUnmatchedFields().size(), llmFields.size());
+        }
+        if (llmFields.isEmpty()) {
+            log.info("全部字段已由模板+确定性匹配覆盖或已有值，跳过 LLM userId={} resumeId={} siteId={}",
                     userId, req.getResumeId(), templateResult.getSiteId());
             PluginAutofillPlanResultVO fullResult = PluginAutofillPlanResultVO.builder()
                     .fillable(true)
@@ -224,9 +237,9 @@ public class PluginFormAutofillAiService {
             throw new BusinessException("简历数据序列化失败");
         }
 
-        // PART_B 仅包含未匹配的字段，大幅缩减 prompt 体积
-        List<PluginPageFormFieldDto> unmatchedFields = detResult.getUnmatchedFields();
-        String pageJson = toPageFieldsJson(req, unmatchedFields);
+        // PART_B 仅包含未匹配且无已有值的字段，大幅缩减 prompt 体积；allFields 用于页面结构目录
+        List<PluginPageFormFieldDto> unmatchedFields = llmFields;
+        String pageJson = toPageFieldsJson(req, unmatchedFields, fields);
         String moduleCountsJson;
         try {
             moduleCountsJson = objectMapper.writeValueAsString(ResumeDraftModuleCountsExtractor.fromDraft(detail.getDraft()));
@@ -237,8 +250,13 @@ public class PluginFormAutofillAiService {
                 "已序列化简历与未匹配字段（LLM 待处理控件数=" + unmatchedFields.size()
                         + "，确定性已匹配=" + detResult.getMatchedAssignments().size() + "）", 28);
 
+        // PART_A 相关性裁剪：按未匹配字段推断保留的简历模块，减少 token 消耗（召回优先，失败静默降级）
+        String prunedResumeJson = resumeDraftPromptPruner.prune(resumeJson, unmatchedFields);
+        log.info("PART_A 简历 JSON 相关性裁剪: 裁剪前={}字符 裁剪后={}字符 未匹配字段数={}",
+                resumeJson.length(), prunedResumeJson.length(), unmatchedFields.size());
+
         // 发送 LLM 前先把简历 PII（手机号/身份证/邮箱）替换为占位符；映射仅存本次请求内存
-        SensitiveDataMasker.MaskSession maskSession = SensitiveDataMasker.mask(resumeJson);
+        SensitiveDataMasker.MaskSession maskSession = SensitiveDataMasker.mask(prunedResumeJson);
 
         // ========== 阶段 7：调用 LangChain4j AI Service（字段少 → 推理更快） ==========
         String userMessage = promptProvider.buildUserMessage(maskSession.maskedText(), pageJson, moduleCountsJson);
@@ -248,19 +266,27 @@ public class PluginFormAutofillAiService {
 
         PluginAutofillPlanResultVO parsed;
         try {
+            // 结果不可解析（parsed==null）视为服务未成功，不扣点不记用量
             parsed = billingService.execute(
                     userId, AiUsageBizType.PLUGIN_AUTOFILL, req.getResumeId(),
-                    () -> assistant.planAutofill(PluginAutofillPromptProvider.SYSTEM, userMessage));
+                    () -> assistant.planAutofill(PluginAutofillPromptProvider.SYSTEM, userMessage),
+                    r -> r != null);
         } catch (BusinessException e) {
             // 额度不足等业务异常直接透传，不再包装为“大模型失败”
             throw e;
         } catch (Exception e) {
-            log.error("填表调用大模型失败 userId={} resumeId={}", userId, req.getResumeId(), e);
-            throw new BusinessException("调用大模型失败：" + e.getMessage());
+            // LLM 超时/网关异常：降级返回模板+确定性结果，不再让整个任务失败
+            log.error("填表调用大模型异常，降级为模板+确定性结果 userId={} resumeId={}",
+                    userId, req.getResumeId(), e);
+            return degradeWithoutLlm(templateResult, detResult, p,
+                    "AI 处理超时或暂时不可用，已先填入可确定性匹配的字段；其余字段可点击重试（将重新调用 AI 生成完整填表计划，不重复扣费），或手动补充");
         }
 
         if (parsed == null) {
-            throw new BusinessException("模型未返回有效结果");
+            // 模型输出不可解析（不扣点）：同样降级为部分结果，给用户可用产出
+            log.warn("模型未返回有效结果，降级为模板+确定性结果 userId={} resumeId={}", userId, req.getResumeId());
+            return degradeWithoutLlm(templateResult, detResult, p,
+                    "AI 暂时未返回有效结果，已先填入可确定性匹配的字段；其余字段可点击重试（将重新调用 AI 生成完整填表计划，不重复扣费），或手动补充");
         }
 
         // 隐私还原：把 LLM 输出中的 [PHONE_1] 等占位符换回真实简历值，保证填表写入的是真值
@@ -331,8 +357,26 @@ public class PluginFormAutofillAiService {
      * 三层合并：模板匹配 > 确定性匹配 > LLM。高优先级层已覆盖的 selector，低优先级层中重复的 assignment 被丢弃。
      * order 从 1 开始重新分配（模板字段在前，确定性次之，LLM 在后）。
      */
-    private PluginAutofillPlanResultVO mergeResults(SiteTemplateMatchResult templateResult,
-                                                    DeterministicMatchResult detResult,
+    /**
+     * LLM 不可用时的降级结果：只保留模板+确定性匹配的产出。
+     * 刻意<b>不写结果缓存</b>——降级是临时态，下次重试应重新走完整 LLM 链路。
+     */
+    private PluginAutofillPlanResultVO degradeWithoutLlm(SiteTemplateMatchResult templateResult,
+                                                         DeterministicMatchResult detResult,
+                                                         PluginAutofillProgressSink p, String hint) {
+        PluginAutofillPlanResultVO emptyLlm = PluginAutofillPlanResultVO.builder()
+                .fillable(false)
+                .hint(hint)
+                .assignments(List.of())
+                .blockedFields(List.of())
+                .build();
+        PluginAutofillPlanResultVO degraded = mergeResults(templateResult, detResult, emptyLlm);
+        p.onProgress(PluginAutofillProgressPhase.COMPLETED, "LLM 不可用，已降级返回确定性匹配结果", 100);
+        return degraded;
+    }
+
+    // 包私有以便单测直接验证三层合并与 assignment/blocked 互斥
+    PluginAutofillPlanResultVO mergeResults(SiteTemplateMatchResult templateResult,                                                    DeterministicMatchResult detResult,
                                                     PluginAutofillPlanResultVO llmResult) {
         List<PluginFieldAssignmentDto> merged = new ArrayList<>();
         Set<String> coveredSelectors = new HashSet<>();
@@ -386,6 +430,10 @@ public class PluginFormAutofillAiService {
             }
         }
 
+        // 互斥：同一 selector 已有 assignment 时剔除其 blocked 项——模型偶发把同一控件同时写进
+        // assignments 与 blockedFields（如区号下拉既给值又报 compound_unresolved），以填入为准
+        allBlocked.removeIf(b -> coveredSelectors.contains(normalizeSelectorKey(b.getSelector())));
+
         boolean fillable = !merged.isEmpty() || (llmResult.isFillable());
         return PluginAutofillPlanResultVO.builder()
                 .fillable(fillable)
@@ -433,13 +481,17 @@ public class PluginFormAutofillAiService {
         return new ArrayList<>(rawFields.subList(0, MAX_FIELDS)); // 只保留前 N 个，后续白名单也只认这批
     }
 
-    private String toPageFieldsJson(PluginAutofillPlanRequest req, List<PluginPageFormFieldDto> fields) {
+    private String toPageFieldsJson(PluginAutofillPlanRequest req, List<PluginPageFormFieldDto> fields,
+                                    List<PluginPageFormFieldDto> allFields) {
         try {
             // 与提示词 PART_B 约定一致：扁平对象；fields 为 PluginPageFormFieldDto 列表（Jackson 序列化可选字段 compoundSegment、interactionMode、optionLabelsSample 等）
+            // pageStructure：全页面字段的轻量目录（仅标签+是否已匹配，按 DOM 顺序），供模型判断未匹配字段所属模块块，
+            // 解决「PART_B 只含未匹配字段后，模型丢失块归属上下文，把多模块内容拼进同一描述框」的问题
             Map<String, Object> wrap = Map.of(
                     "pageUrl", req.getPage().getPageUrl() != null ? req.getPage().getPageUrl() : "",
                     "pageTitle", req.getPage().getPageTitle() != null ? req.getPage().getPageTitle() : "",
-                    "fields", fields
+                    "fields", fields,
+                    "pageStructure", buildPageStructure(allFields, fields)
             );
             return objectMapper.writeValueAsString(wrap);
         } catch (JsonProcessingException e) {
@@ -448,12 +500,46 @@ public class PluginFormAutofillAiService {
     }
 
     /**
+     * 构建页面结构目录：每个字段一行 {i, label, matched}，label 取标签/锚点/占位符中首个非空值。
+     * 体积刻意极小（无 selector、无值），只承担「块归属定位」职责。
+     */
+    private List<Map<String, Object>> buildPageStructure(List<PluginPageFormFieldDto> allFields,
+                                                         List<PluginPageFormFieldDto> unmatchedFields) {
+        Set<String> unmatchedKeys = new HashSet<>();
+        for (PluginPageFormFieldDto f : unmatchedFields) {
+            unmatchedKeys.add(normalizeSelectorKey(f.getSelector()));
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        int i = 1;
+        for (PluginPageFormFieldDto f : allFields) {
+            String label = firstNonBlank(f.getLabelText(), f.getI18nLabel(), f.getPlaceholder(),
+                    f.getCompoundSegment(), f.getName(), f.getId());
+            rows.add(Map.of(
+                    "i", i++,
+                    "label", label != null ? label : "",
+                    "matched", !unmatchedKeys.contains(normalizeSelectorKey(f.getSelector()))
+            ));
+        }
+        return rows;
+    }
+
+    private static String firstNonBlank(String... texts) {
+        for (String t : texts) {
+            if (StringUtils.hasText(t)) {
+                return t.trim();
+            }
+        }
+        return null;
+    }
+
+    /**
      * 安全裁剪：selector/subSelector 必须在快照内；合并客户端锚点；规范化 reason/matchType；剔除无值的无效 assignment。
      * <p>
      * 使用 {@link #normalizeSelectorKey(String)} 建索引：模型回传的 CSS 路径可能与扩展快照仅有空白差异，
      * 匹配成功后把 {@link PluginFieldAssignmentDto#setSelector(String)} 回写为快照中的「权威」字符串，保证扩展 querySelector 可用。
      */
-    private PluginAutofillPlanResultVO sanitizePlan(PluginAutofillPlanResultVO parsed, List<PluginPageFormFieldDto> fields) {
+    // 包私有以便单测直接验证清洗与复合字段归一
+    PluginAutofillPlanResultVO sanitizePlan(PluginAutofillPlanResultVO parsed, List<PluginPageFormFieldDto> fields) {
         // key = 规范化后的 selector，value = 原始快照字段（含扩展采集的锚点等）
         Map<String, PluginPageFormFieldDto> fieldByNormKey = new LinkedHashMap<>();
         for (PluginPageFormFieldDto f : fields) {
@@ -505,6 +591,19 @@ public class PluginFormAutofillAiService {
                 List<PluginSubAssignmentDto> subs = sanitizeSubAssignments(a.getSubAssignments(), fieldByNormKey);
                 if (a.getSubAssignments() != null) {
                     a.setSubAssignments(subs);
+                }
+                // 复合字段归一：快照标了 compoundSegment 而模型把值写在了主 value（未用 subAssignments）时，
+                // 转为带 targetRole 的子赋值（date_start/date_end 等），前端据此走对应的控件交互，
+                // 并清空主 value，避免前端用主 value 覆盖复合字段整行容器
+                if (StringUtils.hasText(a.getValue()) && subs.isEmpty()
+                        && StringUtils.hasText(matched.getCompoundSegment())) {
+                    subs = List.of(PluginSubAssignmentDto.builder()
+                            .selector(matched.getSelector().trim())
+                            .value(a.getValue().trim())
+                            .targetRole(matched.getCompoundSegment().trim().toLowerCase())
+                            .build());
+                    a.setSubAssignments(subs);
+                    a.setValue(null);
                 }
                 boolean hasValue = StringUtils.hasText(a.getValue());
                 boolean hasSubs = !subs.isEmpty();
@@ -571,14 +670,11 @@ public class PluginFormAutofillAiService {
 
     private static String normalizeBlockedReason(String r) {
         if (!StringUtils.hasText(r)) {
-            return "other";
+            return BlockedFieldReasons.OTHER;
         }
         String x = r.trim().toLowerCase(Locale.ROOT);
-        // 模型若发明新 reason，统一归为 other，避免前端 switch 炸开
-        return switch (x) {
-            case "readonly", "captcha", "attachment", "no_mapping", "ambiguous", "compound_unresolved", "policy", "other" -> x;
-            default -> "other";
-        };
+        // 模型若发明新 reason，统一归为 other，避免前端 switch 炸开；值域以 BlockedFieldReasons 为准
+        return BlockedFieldReasons.isValid(x) ? x : BlockedFieldReasons.OTHER;
     }
 
     private static String defaultBlockedHint(String reason) {

@@ -47,4 +47,19 @@ public class TemplateFieldMapping {
      */
     @Builder.Default
     private boolean skip = false;
+
+    /**
+     * skip=true 时的 blocked 原因码（可选），值域以
+     * {@code com.smartapply.ida.common.domain.plugin.autofill.BlockedFieldReasons} 为准：
+     * {@code readonly}/{@code captcha}/{@code attachment}/{@code no_mapping}/{@code ambiguous}/
+     * {@code compound_unresolved}/{@code policy}/{@code other}。
+     * 为空（JSON 中不写）时默认 {@code other}。
+     */
+    private String blockedReason;
+
+    /**
+     * skip=true 时给用户看的提示文案（可选，如 "附件需人工上传"）；
+     * 为空（JSON 中不写）时由匹配器使用默认文案。
+     */
+    private String blockedHint;
 }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.smartapply.ida.common.constant.PluginCacheConstants;
 import com.smartapply.ida.common.domain.resume.*;
 import com.smartapply.ida.common.domain.resume.dto.ResumeSaveDraftRequest;
 import com.smartapply.ida.common.domain.resume.dto.ResumeUpdateRequest;
@@ -23,9 +24,13 @@ import com.smartapply.ida.module.app.resume.mapper.ResumeSkillMapper;
 import com.smartapply.ida.module.app.resume.mapper.ResumeWorkMapper;
 import com.smartapply.ida.module.app.resume.service.AppResumeDraftService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
@@ -52,6 +57,7 @@ import java.util.List;
  * </ul>
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class AppResumeDraftServiceImpl implements AppResumeDraftService {
     private static final List<DateTimeFormatter> LOCAL_DATE_FORMATTERS = List.of(
@@ -77,6 +83,7 @@ public class AppResumeDraftServiceImpl implements AppResumeDraftService {
     private final ResumeAwardMapper resumeAwardMapper;
     private final ResumePublicationMapper resumePublicationMapper;
     private final ObjectMapper objectMapper;
+    private final StringRedisTemplate stringRedisTemplate;
 
     /**
      * 新建或更新一份简历草稿。
@@ -112,6 +119,7 @@ public class AppResumeDraftServiceImpl implements AppResumeDraftService {
             resumeMapper.updateById(existing);
             insertAllChildren(resumeId, d, now);
             applyDefaultFlag(userId, resumeId, req.getIsDefault());
+            evictPreloadCache(userId, resumeId);
             return ResumeSaveDraftResultVO.builder().resumeId(resumeId).build();
         }
 
@@ -195,6 +203,39 @@ public class AppResumeDraftServiceImpl implements AppResumeDraftService {
 
         if (wasDefault) {
             promoteLatestResumeToDefault(userId);
+        }
+        evictPreloadCache(userId, resumeId);
+    }
+
+    /**
+     * 失效插件侧「简历预加载缓存」（{@code ResumePreloadCacheService}，键见 {@link PluginCacheConstants}）。
+     * 简历更新/删除路径调用，避免 TTL 窗口期内插件 planAutofill 读到旧 draft；
+     * 新建分支不调用——新简历此前无预热缓存可失效。
+     * <p>
+     * 本方法处于事务内：若 commit 前直接删缓存，evict 与 commit 之间的窗口内并发
+     * GET /autofill-context 会用未提交的旧数据重新预热缓存。故在事务同步激活时
+     * 注册 {@link TransactionSynchronization#afterCommit()} 于提交后再删；
+     * 无事务同步（如单测直调）则直接删。
+     * 删除失败仅告警，不影响主流程；缓存键留在 Redis 中最多 10 分钟后自然过期。
+     */
+    private void evictPreloadCache(long userId, Long resumeId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deletePreloadKey(userId, resumeId);
+                }
+            });
+            return;
+        }
+        deletePreloadKey(userId, resumeId);
+    }
+
+    private void deletePreloadKey(long userId, Long resumeId) {
+        try {
+            stringRedisTemplate.delete(PluginCacheConstants.resumePreloadKey(userId, resumeId));
+        } catch (Exception e) {
+            log.warn("简历预加载缓存失效失败: userId={}, resumeId={}, err={}", userId, resumeId, e.getMessage());
         }
     }
 

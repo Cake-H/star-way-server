@@ -26,16 +26,18 @@ import java.util.Map;
 public class PluginAutofillFeedbackStatsService {
 
     private static final int TOP_N = 20;
+    /** days 上限：与反馈表 90 天保留期对齐，超过部分查不到数据且无意义 */
+    private static final int MAX_DAYS = 90;
 
     private final PluginAutofillFeedbackMapper feedbackMapper;
 
     /**
      * @param userId   当前用户
-     * @param days     统计近 N 天，默认 30
+     * @param days     统计近 N 天，默认 30，上限 {@value #MAX_DAYS}
      * @param siteHost 可选，按站点过滤
      */
     public PluginAutofillFeedbackStatVO stats(long userId, Integer days, String siteHost) {
-        int d = days == null || days <= 0 ? 30 : days;
+        int d = days == null || days <= 0 ? 30 : Math.min(days, MAX_DAYS);
         LocalDateTime since = LocalDateTime.now().minusDays(d);
 
         PluginAutofillFeedbackStatVO vo = new PluginAutofillFeedbackStatVO();

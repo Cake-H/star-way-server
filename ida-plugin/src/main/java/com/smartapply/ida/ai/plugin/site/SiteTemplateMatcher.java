@@ -16,7 +16,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -26,7 +28,8 @@ import java.util.Set;
  * <ul>
  *   <li>已有预填值（currentValue）的字段 → unmatched（与确定性层一致，不覆盖）。</li>
  *   <li>复合字段（compoundSegment 非空）/长文本（textarea 等）→ unmatched，交 LLM 处理多字段拼接与子选择器。</li>
- *   <li>命中 {@link TemplateFieldMapping#isSkip()} → blockedFields（reason=other）。</li>
+ *   <li>命中 {@link TemplateFieldMapping#isSkip()} → blockedFields（reason 取映射的
+ *       {@code blockedReason}、默认 {@code other}；提示取 {@code blockedHint}、默认内置文案）。</li>
  *   <li>命中金标且简历有值：下拉字段经 {@link OptionMatcher} 选项匹配，成功→assignment；失败→unmatched 降级交 LLM。
  *       非下拉字段→assignment（confidence=0.99, matchType=template）。</li>
  *   <li>未命中任何映射行 → unmatched。</li>
@@ -61,6 +64,9 @@ public class SiteTemplateMatcher {
 
         List<TemplateFieldMapping> mappings = template.getFieldMappings();
         int order = 1;
+        // 集合路径出现次序计数：多块表单（如两个项目块）中同一映射第 N 次命中时取简历第 N 条，
+        // 与 DeterministicFieldMatcher 的出现次序索引同语义，避免后块被第一条经历覆盖
+        Map<String, Integer> pathOccurrence = new HashMap<>();
 
         for (PluginPageFormFieldDto field : fields) {
             // 已有预填值不覆盖
@@ -80,9 +86,9 @@ public class SiteTemplateMatcher {
                 continue;
             }
 
-            // 模板标注 skip → 直接进 blocked
+            // 模板标注 skip → 直接进 blocked（reason/hint 取映射配置，空则用默认值）
             if (mapping.isSkip()) {
-                blocked.add(buildBlocked(field, template));
+                blocked.add(buildBlocked(field, mapping));
                 continue;
             }
 
@@ -92,9 +98,10 @@ public class SiteTemplateMatcher {
                 unmatched.add(field);
                 continue;
             }
-            String rawValue = ResumeFieldAccessor.extractValue(draft, resumePath);
+            String effectivePath = resolveIndexedPath(resumePath, pathOccurrence);
+            String rawValue = ResumeFieldAccessor.extractValue(draft, effectivePath);
             if (rawValue == null) {
-                // 简历无值 → 交下层（下层也会判空，但保持流转一致）
+                // 简历无值（含块序号超出简历条目数）→ 交下层（下层也会判空，但保持流转一致）
                 unmatched.add(field);
                 continue;
             }
@@ -102,7 +109,7 @@ public class SiteTemplateMatcher {
             // 下拉字段做选项匹配
             String enumCategory = StringUtils.hasText(mapping.getEnumCategory())
                     ? mapping.getEnumCategory()
-                    : ChineseFieldAliasTable.inferEnumCategory(resumePath);
+                    : ChineseFieldAliasTable.inferEnumCategory(effectivePath);
             if (hasOptions(field)) {
                 String optionMatch = OptionMatcher.matchOption(rawValue, field.getOptionLabelsSample(), enumCategory);
                 if (optionMatch == null) {
@@ -139,6 +146,22 @@ public class SiteTemplateMatcher {
             }
         }
         return null;
+    }
+
+    /**
+     * 多块表单的出现次序索引：集合路径（如 project.0.projectName）第 N 次命中时改写为
+     * 简历第 N 条条目（project.(N-1).projectName）；非集合路径与首次出现原样返回。
+     * 与 {@code DeterministicFieldMatcher} 的同名逻辑保持一致。
+     */
+    private String resolveIndexedPath(String path, Map<String, Integer> pathOccurrence) {
+        if (path == null || !path.matches("^\\w+\\.\\d+\\.\\w+$")) {
+            return path;
+        }
+        int occurrence = pathOccurrence.merge(path, 1, Integer::sum) - 1;
+        if (occurrence == 0) {
+            return path;
+        }
+        return path.replaceFirst("\\.\\d+\\.", "." + occurrence + ".");
     }
 
     private boolean isLongTextOrCompound(PluginPageFormFieldDto field) {
@@ -186,11 +209,13 @@ public class SiteTemplateMatcher {
                 .build();
     }
 
-    private PluginBlockedFieldDto buildBlocked(PluginPageFormFieldDto field, SiteTemplate template) {
+    private PluginBlockedFieldDto buildBlocked(PluginPageFormFieldDto field, TemplateFieldMapping mapping) {
+        String reason = StringUtils.hasText(mapping.getBlockedReason()) ? mapping.getBlockedReason() : "other";
+        String hint = StringUtils.hasText(mapping.getBlockedHint()) ? mapping.getBlockedHint() : "模板标注需人工处理";
         return PluginBlockedFieldDto.builder()
                 .selector(field.getSelector())
-                .reason("other")
-                .userHint("模板标注需人工处理")
+                .reason(reason)
+                .userHint(hint)
                 .dataFormFieldId(field.getDataFormFieldId())
                 .i18nLabel(field.getI18nLabel())
                 .clientFieldKey(field.getClientFieldKey())

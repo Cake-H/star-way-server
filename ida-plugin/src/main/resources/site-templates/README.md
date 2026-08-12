@@ -41,10 +41,12 @@
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `anchor` | 是 | 锚点条件，复用 `FieldAnchor`，非空条件为「或」关系 |
-| `resumePath` | 否 | 简历字段路径，复用 `ResumeFieldAccessor` 格式，如 `basic.fullName`、`education.0.schoolName` |
-| `enumCategory` | 否 | 下拉枚举类别：`gender`/`degree`/`politicalStatus`/`hukouType`，交给 `OptionMatcher` |
+| `resumePath` | 否 | 简历字段路径，复用 `ResumeFieldAccessor` 格式，如 `basic.fullName`、`education.0.schoolName`；加载时会校验合法性，非法路径整个模板拒绝加载 |
+| `enumCategory` | 否 | 下拉枚举类别：`gender`/`degree`/`politicalStatus`/`hukouType`/`idDocType`，交给 `OptionMatcher`；非空时加载校验类别合法性 |
 | `targetRole` | 否 | 复合字段角色（本轮默认不启用，留扩展） |
-| `skip` | 否 | true 表示该字段无法自动填（附件/验证码等），直接进 blockedFields |
+| `skip` | 否 | true 表示该字段无法自动填（附件/验证码等），直接进 blockedFields；skip 行不要求 `resumePath` |
+| `blockedReason` | 否 | skip 行的 blocked 原因码，枚举同反馈 failReason：`option_not_found`/`readonly`/`date_nav_failed`/`selector_miss`/`other`，默认 `other` |
+| `blockedHint` | 否 | skip 行给用户看的提示文案，如 "附件需人工上传"；空则用默认文案 |
 
 ### FieldAnchor 条件（「或」关系）
 
@@ -74,3 +76,22 @@
 
 `beisen.json` 为**示例模板**，字段映射基于公开特征的最佳估计，**需用真实北森页面快照校准后**再用于生产。
 金标映射错误会导致高置信误填，上线前务必人工 review 每条 `fieldMappings`。
+
+## 反馈驱动的模板扩充流程
+
+模板与别名不是拍脑袋维护的，由反馈数据驱动，闭环如下：
+
+1. **站点候选**：管理后台 `GET /api/v1/admin/plugin/autofill-feedback/site-candidates?days=&limit=`
+   按 `site_host` 聚合命中率，升序输出最差 Top N。命中率持续偏低、且 selector/锚点结构稳定的站点，
+   按本文档规范为其新建 `{siteId}.json` 模板。
+2. **别名候选**：管理后台 `GET /api/v1/admin/plugin/autofill-feedback/alias-candidates?days=&limit=`
+   聚合近 N 天 `fail_reason IN (option_not_found, selector_miss)` 的高频 `client_field_key`。
+   对「标签文案 → 简历字段」映射明确的候选，通过
+   `POST /api/v1/admin/plugin/autofill-alias` 登记动态别名（默认 `approved` 即生效，
+   也可先 `pending` 再 `PUT /autofill-alias/{id}/status` 审核）。
+3. **生效**：`DynamicFieldAliasService`（ida-plugin）每 5 分钟全量刷新 `approved` 别名，
+   参与确定性标签匹配（优先级低于本仓库内置的静态别名表，置信度 0.80、matchType=`dynamic_alias`）。
+4. **沉淀**：被验证稳定、通用性强的动态别名，应回写进 `ChineseFieldAliasTable` 静态表随代码发布；
+   全局效果用 `GET /api/v1/admin/plugin/autofill-feedback/stats` 观察。
+
+反馈明细保留 90 天，候选挖掘与统计均为全局聚合（跨用户），与 C 端用户级统计口径区分。

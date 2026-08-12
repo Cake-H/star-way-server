@@ -1,5 +1,7 @@
 # 一键填表 · 异步接口 · 前端对接说明
 
+> ⚠️ **本文档部分内容为旧版约定**（写于 `partialResult` 增量推送之前，phase 列表与「轮询过程中没有填表列表」等结论已过时）。**最新权威对接说明见 [`plugin-autofill-frontend-integration-current.md`](./plugin-autofill-frontend-integration-current.md)**，冲突处以该文为准。
+
 面向：浏览器扩展 / 插件前端。下文只描述**异步路径**及与同步路径的差异。
 
 ---

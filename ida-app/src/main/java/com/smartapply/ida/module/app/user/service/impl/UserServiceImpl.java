@@ -1,6 +1,7 @@
 package com.smartapply.ida.module.app.user.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.smartapply.ida.common.constant.PluginCacheConstants;
 import com.smartapply.ida.common.domain.interview.InterviewSession;
 import com.smartapply.ida.common.domain.mockInterview.MockInterviewSession;
 import com.smartapply.ida.common.domain.resume.Resume;
@@ -32,8 +33,11 @@ import com.smartapply.ida.module.app.user.mapper.UserMapper;
 import com.smartapply.ida.module.app.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -68,6 +72,7 @@ public class UserServiceImpl implements UserService {
     private final InterviewSessionMapper interviewSessionMapper;
     private final MockInterviewSessionMapper mockInterviewSessionMapper;
     private final LoginSessionService loginSessionService;
+    private final StringRedisTemplate stringRedisTemplate;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -111,11 +116,46 @@ public class UserServiceImpl implements UserService {
         interviewSessionMapper.delete(Wrappers.<InterviewSession>lambdaQuery().eq(InterviewSession::getUserId, userId));
         mockInterviewSessionMapper.delete(Wrappers.<MockInterviewSession>lambdaQuery().eq(MockInterviewSession::getUserId, userId));
 
-        // 5. 撤销当前 token（插件端 token 相互独立，随 TTL 自然过期）
+        // 5. 失效插件侧简历预加载缓存（含 PII）：注销后插件 token 在 TTL 内仍有效，
+        //    若缓存残留，planAutofill 会绕过 DB 校验直接命中已注销用户的简历
+        evictResumePreloadCaches(userId, resumeIds);
+
+        // 6. 撤销当前 token（插件端 token 相互独立，随 TTL 自然过期）
         if (StringUtils.hasText(token)) {
             loginSessionService.revokeToken(token.trim());
         }
 
         log.info("账号注销完成 userId={}，已匿名化并清理关联数据（简历数={}）", userId, resumeIds.size());
+    }
+
+    /**
+     * 失效该用户所有简历的插件预加载缓存（键见 {@link PluginCacheConstants}）。
+     * 本方法处于注销事务内：事务同步激活时注册 {@link TransactionSynchronization#afterCommit()} 于提交后再删，
+     * 避免事务回滚后缓存被误清；无事务同步（如单测直调）则直接删。删除失败仅告警，不阻断注销。
+     */
+    private void evictResumePreloadCaches(long userId, List<Long> resumeIds) {
+        if (resumeIds.isEmpty()) {
+            return;
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deleteResumePreloadKeys(userId, resumeIds);
+                }
+            });
+            return;
+        }
+        deleteResumePreloadKeys(userId, resumeIds);
+    }
+
+    private void deleteResumePreloadKeys(long userId, List<Long> resumeIds) {
+        for (Long resumeId : resumeIds) {
+            try {
+                stringRedisTemplate.delete(PluginCacheConstants.resumePreloadKey(userId, resumeId));
+            } catch (Exception e) {
+                log.warn("账号注销：简历预加载缓存失效失败 userId={}, resumeId={}: {}", userId, resumeId, e.getMessage());
+            }
+        }
     }
 }
