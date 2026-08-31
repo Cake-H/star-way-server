@@ -129,7 +129,7 @@ public class AppResumeQueryServiceImpl implements AppResumeQueryService {
     public PluginAutofillResumeContextVO getAutofillResumeContext(long userId, long resumeId) {
         // 与详情接口共用读路径：抛「无权查看」等业务异常的行为一致
         ResumeDetailVO detail = getResumeDetail(userId, resumeId);
-        // draft 在 getResumeDetail 内已保证非 null 子表列表（可能为空列表）
+        // 表draft 在 getResumeDetail 内已保证非 null 子表列表（可能为空列）
         return PluginAutofillResumeContextVO.builder()
                 .resumeId(resumeId)
                 .schemaVersion(detail.getSchemaVersion())

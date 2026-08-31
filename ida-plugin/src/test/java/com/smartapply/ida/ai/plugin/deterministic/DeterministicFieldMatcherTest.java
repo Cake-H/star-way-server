@@ -2,6 +2,7 @@ package com.smartapply.ida.ai.plugin.deterministic;
 
 import com.smartapply.ida.common.domain.plugin.autofill.PluginFieldAssignmentDto;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginPageFormFieldDto;
+import com.smartapply.ida.common.domain.resume.dto.parse.ResumeEducationDraftLine;
 import com.smartapply.ida.common.domain.resume.dto.parse.ResumeParseDraftDto;
 import com.smartapply.ida.common.domain.resume.dto.parse.ResumeProjectDraftLine;
 import org.junit.jupiter.api.Test;
@@ -196,5 +197,88 @@ class DeterministicFieldMatcherTest {
         assertThat(result.getMatchedAssignments().get(0).getValue()).isEqualTo("项目A");
         assertThat(result.getUnmatchedFields()).hasSize(1);
         assertThat(result.getUnmatchedFields().get(0).getSelector()).isEqualTo("#p1name");
+    }
+
+    @Test
+    void openTypeaheadSchoolWithPartialOptionSample_shouldKeepResumeRawValue() {
+        DynamicFieldAliasService aliasService = mock(DynamicFieldAliasService.class);
+        DeterministicFieldMatcher matcher = new DeterministicFieldMatcher(aliasService);
+
+        ResumeParseDraftDto draft = new ResumeParseDraftDto();
+        ResumeEducationDraftLine edu = new ResumeEducationDraftLine();
+        edu.setSchoolName("江苏科技大学");
+        draft.setEducations(List.of(edu));
+
+        // 线上事故场景：学校 combobox 的 optionLabelsSample 只有未展开时采到的残缺项「大学」，
+        // 不得 contains 改写为「大学」，必须直填简历原值，由前端键入后在完整选项中匹配
+        PluginPageFormFieldDto f = textField("#school", null);
+        f.setClientFieldKey("education.0.schoolName");
+        f.setInteractionMode("combobox_typeahead");
+        f.setOptionLabelsSample(List.of("大学", "其他"));
+        DeterministicMatchResult result = matcher.matchAll(List.of(f), draft);
+
+        assertThat(result.getMatchedAssignments()).hasSize(1);
+        assertThat(result.getMatchedAssignments().get(0).getValue()).isEqualTo("江苏科技大学");
+    }
+
+    @Test
+    void educationTypeLabel_shouldMapToIsFullTimeNotDegree() {
+        DynamicFieldAliasService aliasService = mock(DynamicFieldAliasService.class);
+        DeterministicFieldMatcher matcher = new DeterministicFieldMatcher(aliasService);
+
+        ResumeParseDraftDto draft = new ResumeParseDraftDto();
+        ResumeEducationDraftLine edu = new ResumeEducationDraftLine();
+        edu.setDegree("本科");
+        edu.setIsFullTime(1);
+        draft.setEducations(List.of(edu));
+
+        // 「学历类型」值域是 统招全日制/自考 等，不是「学历(degree)」的 本科/硕士：
+        // 精确别名命中 education.0.isFullTime，经 fullTime 枚举别名组映射到选项「统招全日制」
+        PluginPageFormFieldDto f = textField("#edu-type", "学历类型");
+        f.setInteractionMode("single_select");
+        f.setOptionLabelsSample(List.of("海外及港澳台", "统招全日制", "统招非全日制", "自考", "其他"));
+        DeterministicMatchResult result = matcher.matchAll(List.of(f), draft);
+
+        assertThat(result.getMatchedAssignments()).hasSize(1);
+        PluginFieldAssignmentDto a = result.getMatchedAssignments().get(0);
+        assertThat(a.getValue()).isEqualTo("统招全日制");
+    }
+
+    @Test
+    void educationTypeWithoutOptions_shouldUseFullTimeDisplayText() {
+        DynamicFieldAliasService aliasService = mock(DynamicFieldAliasService.class);
+        DeterministicFieldMatcher matcher = new DeterministicFieldMatcher(aliasService);
+
+        ResumeParseDraftDto draft = new ResumeParseDraftDto();
+        ResumeEducationDraftLine edu = new ResumeEducationDraftLine();
+        edu.setIsFullTime(1);
+        draft.setEducations(List.of(edu));
+
+        // 选择类控件无选项样本：isFullTime 原始值 "1" 转 fullTime 枚举组首选展示文案，不得借 degree 值域填「本科」
+        PluginPageFormFieldDto f = textField("#edu-type", "学历类型");
+        f.setInteractionMode("combobox_typeahead");
+        DeterministicMatchResult result = matcher.matchAll(List.of(f), draft);
+
+        assertThat(result.getMatchedAssignments()).hasSize(1);
+        PluginFieldAssignmentDto a = result.getMatchedAssignments().get(0);
+        assertThat(a.getValue()).isEqualTo("统招全日制");
+        assertThat(a.getFallbackValues()).contains("全日制");
+    }
+
+    @Test
+    void currentCityLabel_shouldMapToCurrentCityNotCity() {
+        DynamicFieldAliasService aliasService = mock(DynamicFieldAliasService.class);
+        DeterministicFieldMatcher matcher = new DeterministicFieldMatcher(aliasService);
+
+        ResumeParseDraftDto draft = new ResumeParseDraftDto();
+        draft.setCity("广州");        // location.city 是户籍/籍贯语义
+        draft.setCurrentCity("深圳"); // location.currentCity 才是现居
+
+        // 「当前居住城市」精确别名命中 location.currentCity，不再被 contains 的「城市」误命中户籍城市
+        DeterministicMatchResult result = matcher.matchAll(
+                List.of(textField("#cur-city", "当前居住城市")), draft);
+
+        assertThat(result.getMatchedAssignments()).hasSize(1);
+        assertThat(result.getMatchedAssignments().get(0).getValue()).isEqualTo("深圳");
     }
 }

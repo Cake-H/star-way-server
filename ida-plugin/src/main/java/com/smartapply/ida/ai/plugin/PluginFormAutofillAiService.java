@@ -4,8 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartapply.ida.ai.langchain4j.assistant.PluginAutofillAssistant;
 import com.smartapply.ida.ai.langchain4j.prompt.PluginAutofillPromptProvider;
+import com.smartapply.ida.ai.plugin.deterministic.ChineseFieldAliasTable;
 import com.smartapply.ida.ai.plugin.deterministic.DeterministicFieldMatcher;
 import com.smartapply.ida.ai.plugin.deterministic.DeterministicMatchResult;
+import com.smartapply.ida.ai.plugin.deterministic.OptionMatcher;
 import com.smartapply.ida.ai.plugin.site.SiteTemplateMatcher;
 import com.smartapply.ida.ai.plugin.site.SiteTemplateRegistry;
 import com.smartapply.ida.ai.usage.AiUsageBizType;
@@ -533,7 +535,9 @@ public class PluginFormAutofillAiService {
     }
 
     /**
-     * 安全裁剪：selector/subSelector 必须在快照内；合并客户端锚点；规范化 reason/matchType；剔除无值的无效 assignment。
+     * 安全裁剪：selector/subSelector 必须在快照内；合并客户端锚点；规范化 reason/matchType；
+     * 出口枚举校验（快照带选项样本且非开放联想框时 value 必须命中选项，否则转 blocked）；
+     * 无值 assignment 带 skipReason 时转 blocked，否则剔除。
      * <p>
      * 使用 {@link #normalizeSelectorKey(String)} 建索引：模型回传的 CSS 路径可能与扩展快照仅有空白差异，
      * 匹配成功后把 {@link PluginFieldAssignmentDto#setSelector(String)} 回写为快照中的「权威」字符串，保证扩展 querySelector 可用。
@@ -559,8 +563,8 @@ public class PluginFormAutofillAiService {
                     .build();
         }
 
-        // 同样按白名单过滤 blockedFields，并补默认 userHint
-        List<PluginBlockedFieldDto> blockedSafe = sanitizeBlockedFields(parsed.getBlockedFields(), fieldByNormKey);
+        // 同样按白名单过滤 blockedFields，并补默认 userHint；可编辑列表：出口校验会追加新的 blocked 项
+        List<PluginBlockedFieldDto> blockedSafe = new ArrayList<>(sanitizeBlockedFields(parsed.getBlockedFields(), fieldByNormKey));
 
         if (!parsed.isFillable()) {
             // 模型判定整页不可填：仍返回清洗后的 blocked，assignments 清空
@@ -608,7 +612,30 @@ public class PluginFormAutofillAiService {
                 boolean hasValue = StringUtils.hasText(a.getValue());
                 boolean hasSubs = !subs.isEmpty();
                 if (!hasValue && !hasSubs) {
-                    continue; // 纯复合字段必须至少有一条子赋值
+                    // 模型按提示词规则对无法匹配选项/无法映射的字段会输出空 value + skipReason：
+                    // 不静默丢弃，转 blocked 让前端提示用户手动处理
+                    if (StringUtils.hasText(a.getSkipReason())) {
+                        addBlockedIfAbsent(blockedSafe, matched, a.getSkipReason(), null);
+                    }
+                    continue;
+                }
+                // 出口枚举校验：快照带选项样本且非开放联想框时，value 必须落在选项名录内，
+                // 防模型输出「精通」这类不在选项内的值直接透传到页面；命中但文案不一致时对齐为选项原文
+                if (hasValue && matched.getOptionLabelsSample() != null
+                        && !matched.getOptionLabelsSample().isEmpty()) {
+                    String category = ChineseFieldAliasTable.inferEnumCategory(matched.getClientFieldKey());
+                    if (!OptionMatcher.isOpenTypeahead(matched.getInteractionMode(), category)) {
+                        String optionMatch = OptionMatcher.matchOption(
+                                a.getValue(), matched.getOptionLabelsSample(), category);
+                        if (optionMatch == null) {
+                            log.info("出口枚举校验未通过，assignment 转 blocked: selector={}, value={}, options={}",
+                                    matched.getSelector(), a.getValue(), matched.getOptionLabelsSample());
+                            addBlockedIfAbsent(blockedSafe, matched,
+                                    BlockedFieldReasons.AMBIGUOUS, "未匹配到合适的下拉选项，请手动选择");
+                            continue;
+                        }
+                        a.setValue(optionMatch);
+                    }
                 }
                 mergeAnchorsOntoAssignment(a, matched);
                 normalizeAssignmentMeta(a);
@@ -675,6 +702,27 @@ public class PluginFormAutofillAiService {
         String x = r.trim().toLowerCase(Locale.ROOT);
         // 模型若发明新 reason，统一归为 other，避免前端 switch 炸开；值域以 BlockedFieldReasons 为准
         return BlockedFieldReasons.isValid(x) ? x : BlockedFieldReasons.OTHER;
+    }
+
+    /**
+     * assignment 无法安全下发时转为 blocked：从快照带回锚点；同 selector 已有 blocked 项则不重复添加。
+     */
+    private static void addBlockedIfAbsent(List<PluginBlockedFieldDto> blockedSafe,
+                                           PluginPageFormFieldDto field, String reason, String userHint) {
+        String normSel = normalizeSelectorKey(field.getSelector());
+        for (PluginBlockedFieldDto b : blockedSafe) {
+            if (normalizeSelectorKey(b.getSelector()).equals(normSel)) {
+                return;
+            }
+        }
+        String normReason = normalizeBlockedReason(reason);
+        PluginBlockedFieldDto blocked = PluginBlockedFieldDto.builder()
+                .selector(field.getSelector().trim())
+                .reason(normReason)
+                .userHint(StringUtils.hasText(userHint) ? userHint : defaultBlockedHint(normReason))
+                .build();
+        mergeAnchorsOntoBlocked(blocked, field);
+        blockedSafe.add(blocked);
     }
 
     private static String defaultBlockedHint(String reason) {

@@ -2,6 +2,7 @@ package com.smartapply.ida.ai.plugin;
 
 import com.smartapply.ida.common.domain.plugin.autofill.PluginAutofillPlanResultVO;
 import com.smartapply.ida.common.domain.plugin.autofill.task.PluginAutofillProgressPhase;
+import com.smartapply.ida.module.plugin.resume.autofill.PluginAutofillTaskRegistry;
 
 /**
  * 填表计划生成过程中的进度回调：由 {@link PluginFormAutofillAiService} 在关键步骤调用，

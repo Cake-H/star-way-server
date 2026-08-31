@@ -47,10 +47,24 @@ class ChineseFieldAliasTableTest {
         assertThat(ChineseFieldAliasTable.resolveByLabel("所学专业")).isEqualTo("education.0.major");
         assertThat(ChineseFieldAliasTable.resolveByLabel("工作单位")).isEqualTo("work.0.companyName");
         assertThat(ChineseFieldAliasTable.resolveByLabel("家庭住址")).isEqualTo("location.detailAddress");
+        // 「学历类型」独立于「学历」：指向 isFullTime 而非 degree，禁止跨字段值域复用
+        assertThat(ChineseFieldAliasTable.resolveByLabel("学历类型")).isEqualTo("education.0.isFullTime");
+        assertThat(ChineseFieldAliasTable.resolveByLabel("是否全日制")).isEqualTo("education.0.isFullTime");
+        assertThat(ChineseFieldAliasTable.resolveByLabel("当前居住城市")).isEqualTo("location.currentCity");
         // 所有新增/存量静态别名路径都必须在 ResumeFieldAccessor 注册
         assertThat(ResumeFieldAccessor.isKnownKey("job.expectedCities")).isTrue();
         assertThat(ResumeFieldAccessor.isKnownKey("work.0.jobTitle")).isTrue();
         assertThat(ResumeFieldAccessor.isKnownKey("education.0.enrollDate")).isTrue();
+        assertThat(ResumeFieldAccessor.isKnownKey("education.0.isFullTime")).isTrue();
+    }
+
+    @Test
+    void fullTimeEnumAlias_shouldMapCodeToDisplayText() {
+        assertThat(ChineseFieldAliasTable.matchByEnumAlias("fullTime", "1",
+                List.of("海外及港澳台", "统招全日制", "统招非全日制", "自考", "其他"))).isEqualTo("统招全日制");
+        assertThat(ChineseFieldAliasTable.matchByEnumAlias("fullTime", "0",
+                List.of("统招全日制", "统招非全日制"))).isEqualTo("统招非全日制");
+        assertThat(ChineseFieldAliasTable.inferEnumCategory("education.0.isFullTime")).isEqualTo("fullTime");
     }
 
     @Test

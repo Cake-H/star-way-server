@@ -230,16 +230,13 @@ public class DeterministicFieldMatcher {
         String finalValue = rawValue;
         List<String> fallbacks = List.of();
         if (hasOptions(field)) {
-            String fieldName = ResumeFieldAccessor.extractFieldName(key);
-            String enumCategory = ChineseFieldAliasTable.inferEnumCategory(fieldName);
-            String optionMatch = OptionMatcher.matchOption(rawValue, field.getOptionLabelsSample(), enumCategory);
-            if (optionMatch == null) {
+            OptionResolution resolution = resolveOptionValue(field, key, rawValue);
+            if (resolution == null) {
                 // 下拉选项匹配失败 → 交给 LLM，它可能有更好的语义理解
                 return null;
             }
-            finalValue = optionMatch;
-            // 生成备选值：原始值 + 选项匹配值（如果不同的话）
-            fallbacks = buildFallbackValues(rawValue, optionMatch);
+            finalValue = resolution.value();
+            fallbacks = resolution.fallbacks();
         } else if (isSelectLikeField(field)) {
             // 选择类控件无选项样本：枚举类别转展示文案（"1"→"男"），备选为整组别名
             String fieldName = ResumeFieldAccessor.extractFieldName(key);
@@ -277,13 +274,12 @@ public class DeterministicFieldMatcher {
         String finalValue = rawValue;
         List<String> fallbacks = List.of();
         if (hasOptions(field)) {
-            String enumCategory = ChineseFieldAliasTable.inferEnumCategory(fieldPath);
-            String optionMatch = OptionMatcher.matchOption(rawValue, field.getOptionLabelsSample(), enumCategory);
-            if (optionMatch == null) {
+            OptionResolution resolution = resolveOptionValue(field, fieldPath, rawValue);
+            if (resolution == null) {
                 return null;
             }
-            finalValue = optionMatch;
-            fallbacks = buildFallbackValues(rawValue, optionMatch);
+            finalValue = resolution.value();
+            fallbacks = resolution.fallbacks();
         } else if (isSelectLikeField(field)) {
             // 选择类控件无选项样本：枚举类别转展示文案（"1"→"男"），备选为整组别名
             List<String> values = resolveSelectLikeValue(
@@ -416,6 +412,33 @@ public class DeterministicFieldMatcher {
             fallbacks.add(rawValue);
         }
         return fallbacks;
+    }
+
+    /** 选项匹配的产出：最终值 + 备选值 */
+    private record OptionResolution(String value, List<String> fallbacks) {}
+
+    /**
+     * 有选项样本时的取值：
+     * <ul>
+     *   <li>封闭下拉（select/single_select 等）：精确 → 枚举别名 → contains 打分，全不中返回 null 交 LLM；</li>
+     *   <li>开放联想框（combobox_typeahead 且非枚举类别，如学校/公司/专业）：optionLabelsSample 只是
+     *       未键入时采到的部分候选而非封闭值域，禁止 contains 打分改写（否则「江苏科技大学」会被样本里的
+     *       残缺项「大学」命中截断）；精确/枚举别名不中时直填简历原值，由前端键入后在完整选项中匹配。</li>
+     * </ul>
+     */
+    private OptionResolution resolveOptionValue(PluginPageFormFieldDto field, String fieldPath, String rawValue) {
+        String enumCategory = ChineseFieldAliasTable.inferEnumCategory(fieldPath);
+        boolean openTypeahead = OptionMatcher.isOpenTypeahead(field.getInteractionMode(), enumCategory);
+        String optionMatch = OptionMatcher.matchOption(
+                rawValue, field.getOptionLabelsSample(), enumCategory, !openTypeahead);
+        if (optionMatch != null) {
+            // 生成备选值：原始值 + 选项匹配值（如果不同的话）
+            return new OptionResolution(optionMatch, buildFallbackValues(rawValue, optionMatch));
+        }
+        if (openTypeahead) {
+            return new OptionResolution(rawValue, List.of());
+        }
+        return null;
     }
 
     private PluginFieldAssignmentDto buildAssignment(

@@ -77,6 +77,8 @@ public final class ChineseFieldAliasTable {
         put(m,"现居城市", "location.currentCity");
         put(m,"目前所在城市", "location.currentCity");
         put(m,"所在城市", "location.currentCity");
+        put(m,"当前居住城市", "location.currentCity");
+        put(m,"现居地", "location.currentCity");
         put(m,"详细地址", "location.detailAddress");
         put(m,"家庭住址", "location.detailAddress");
         put(m,"联系地址", "location.detailAddress");
@@ -132,6 +134,12 @@ public final class ChineseFieldAliasTable {
         put(m,"学历", "education.0.degree");
         put(m,"最高学历", "education.0.degree");
         put(m,"学位", "education.0.academicDegree");
+        // 「学历类型/学习形式」是独立于「学历(degree)」的字段，值域为 统招全日制/自考 等，
+        // 必须精确命中本组别名，避免 contains 兜底借「学历」的值域错填「本科」
+        put(m,"学历类型", "education.0.isFullTime");
+        put(m,"学习形式", "education.0.isFullTime");
+        put(m,"教育类型", "education.0.isFullTime");
+        put(m,"是否全日制", "education.0.isFullTime");
         put(m,"入学时间", "education.0.enrollDate");
         put(m,"入学年份", "education.0.enrollDate");
         put(m,"毕业时间", "education.0.graduateDate");
@@ -264,13 +272,20 @@ public final class ChineseFieldAliasTable {
             "台湾通行证", List.of("台湾通行证", "台湾居民来往大陆通行证")
     );
 
+    /** 学习形式/学历类型：简历 isFullTime(0/1) → 平台选项文案（统招全日制/非全日制 等） */
+    private static final Map<String, List<String>> FULLTIME_ALIASES = Map.of(
+            "1", List.of("统招全日制", "全日制", "普通全日制"),
+            "0", List.of("统招非全日制", "非全日制")
+    );
+
     /** 所有枚举别名类别，key 为字段路径关键词（用于判断一个字段属于哪类枚举） */
     private static final Map<String, Map<String, List<String>>> ENUM_ALIAS_CATEGORIES = Map.of(
             "gender", GENDER_ALIASES,
             "degree", DEGREE_ALIASES,
             "politicalStatus", POLITICAL_ALIASES,
             "hukouType", HUKOU_ALIASES,
-            "idDocType", ID_DOC_TYPE_ALIASES
+            "idDocType", ID_DOC_TYPE_ALIASES,
+            "fullTime", FULLTIME_ALIASES
     );
 
     /**
@@ -370,6 +385,7 @@ public final class ChineseFieldAliasTable {
         String lower = fieldPath.toLowerCase();
         if (lower.contains("gender") || lower.equals("性别")) return "gender";
         if (lower.contains("degree")) return "degree";
+        if (lower.contains("isfulltime") || lower.contains("fulltime")) return "fullTime";
         if (lower.contains("politicalstatus") || lower.contains("political")) return "politicalStatus";
         if (lower.contains("hukoutype") || lower.contains("hukou")) return "hukouType";
         if (lower.contains("iddoctype")) return "idDocType";

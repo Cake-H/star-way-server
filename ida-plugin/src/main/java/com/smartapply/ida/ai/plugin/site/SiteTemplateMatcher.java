@@ -111,10 +111,19 @@ public class SiteTemplateMatcher {
                     ? mapping.getEnumCategory()
                     : ChineseFieldAliasTable.inferEnumCategory(effectivePath);
             if (hasOptions(field)) {
-                String optionMatch = OptionMatcher.matchOption(rawValue, field.getOptionLabelsSample(), enumCategory);
+                // 开放联想框（combobox_typeahead 且非枚举类别）：样本不是封闭值域，禁止 contains 改写，
+                // 精确/枚举别名不中时直填简历原值，由前端键入后在完整选项中匹配
+                boolean openTypeahead = OptionMatcher.isOpenTypeahead(field.getInteractionMode(), enumCategory);
+                String optionMatch = OptionMatcher.matchOption(
+                        rawValue, field.getOptionLabelsSample(), enumCategory, !openTypeahead);
                 if (optionMatch == null) {
-                    // 选项匹配失败 → 交 LLM，它可能有更好的语义理解
-                    unmatched.add(field);
+                    if (!openTypeahead) {
+                        // 选项匹配失败 → 交 LLM，它可能有更好的语义理解
+                        unmatched.add(field);
+                        continue;
+                    }
+                    matched.add(buildAssignment(field, rawValue, List.of(), order));
+                    order++;
                     continue;
                 }
                 matched.add(buildAssignment(field, optionMatch, buildFallbacks(rawValue, optionMatch), order));

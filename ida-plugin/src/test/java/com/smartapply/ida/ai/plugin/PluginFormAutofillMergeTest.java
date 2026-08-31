@@ -124,6 +124,123 @@ class PluginFormAutofillMergeTest {
     }
 
     @Test
+    void llmValueNotInOptions_shouldMoveToBlocked() {
+        // 快照：语言能力「精通程度」下拉，选项名录不含「精通」
+        PluginPageFormFieldDto langField = new PluginPageFormFieldDto();
+        langField.setSelector("#lang-level");
+        langField.setTagName("input");
+        langField.setInteractionMode("single_select");
+        langField.setOptionLabelsSample(List.of("入门", "日常会话", "商务会话", "无障碍沟通", "母语"));
+
+        // 模型输出了不在选项内的值「精通」→ 出口枚举校验拦截，转 blocked 而不是透传错填
+        PluginAutofillPlanResultVO llm = PluginAutofillPlanResultVO.builder()
+                .fillable(true)
+                .assignments(List.of(PluginFieldAssignmentDto.builder()
+                        .selector("#lang-level").value("精通").build()))
+                .blockedFields(List.of())
+                .build();
+
+        PluginAutofillPlanResultVO sanitized = newService().sanitizePlan(llm, List.of(langField));
+
+        assertThat(sanitized.getAssignments()).isEmpty();
+        assertThat(sanitized.getBlockedFields()).hasSize(1);
+        PluginBlockedFieldDto b = sanitized.getBlockedFields().get(0);
+        assertThat(b.getSelector()).isEqualTo("#lang-level");
+        assertThat(b.getReason()).isEqualTo("ambiguous");
+    }
+
+    @Test
+    void llmValueMatchingOption_shouldAlignToOptionText() {
+        PluginPageFormFieldDto degreeField = new PluginPageFormFieldDto();
+        degreeField.setSelector("#degree");
+        degreeField.setTagName("input");
+        degreeField.setInteractionMode("single_select");
+        degreeField.setClientFieldKey("education.0.degree");
+        degreeField.setOptionLabelsSample(List.of("大学本科(Bachelor)", "硕士研究生(Master)"));
+
+        // 值能映射到选项名录（枚举别名/contains）→ 保留并对齐为平台选项原文
+        PluginAutofillPlanResultVO llm = PluginAutofillPlanResultVO.builder()
+                .fillable(true)
+                .assignments(List.of(PluginFieldAssignmentDto.builder()
+                        .selector("#degree").value("本科").build()))
+                .blockedFields(List.of())
+                .build();
+
+        PluginAutofillPlanResultVO sanitized = newService().sanitizePlan(llm, List.of(degreeField));
+
+        assertThat(sanitized.getAssignments()).hasSize(1);
+        assertThat(sanitized.getAssignments().get(0).getValue()).isEqualTo("大学本科(Bachelor)");
+        assertThat(sanitized.getBlockedFields()).isEmpty();
+    }
+
+    @Test
+    void openTypeaheadValueNotInSample_shouldPassThrough() {
+        // 开放联想框（学校）：值不在部分选项样本内属正常，出口校验不得拦截
+        PluginPageFormFieldDto schoolField = new PluginPageFormFieldDto();
+        schoolField.setSelector("#school");
+        schoolField.setTagName("input");
+        schoolField.setInteractionMode("combobox_typeahead");
+        schoolField.setOptionLabelsSample(List.of("大学", "其他"));
+
+        PluginAutofillPlanResultVO llm = PluginAutofillPlanResultVO.builder()
+                .fillable(true)
+                .assignments(List.of(PluginFieldAssignmentDto.builder()
+                        .selector("#school").value("江苏科技大学").build()))
+                .blockedFields(List.of())
+                .build();
+
+        PluginAutofillPlanResultVO sanitized = newService().sanitizePlan(llm, List.of(schoolField));
+
+        assertThat(sanitized.getAssignments()).hasSize(1);
+        assertThat(sanitized.getAssignments().get(0).getValue()).isEqualTo("江苏科技大学");
+        assertThat(sanitized.getBlockedFields()).isEmpty();
+    }
+
+    @Test
+    void emptyValueWithSkipReason_shouldMoveToBlocked() {
+        PluginPageFormFieldDto eduTypeField = new PluginPageFormFieldDto();
+        eduTypeField.setSelector("#edu-type");
+        eduTypeField.setTagName("input");
+        eduTypeField.setInteractionMode("single_select");
+
+        // 模型按规则输出空 value + skipReason=no_mapping：不得静默消失，应转 blocked 提示用户
+        PluginAutofillPlanResultVO llm = PluginAutofillPlanResultVO.builder()
+                .fillable(true)
+                .assignments(List.of(PluginFieldAssignmentDto.builder()
+                        .selector("#edu-type").value("").skipReason("no_mapping").build()))
+                .blockedFields(List.of())
+                .build();
+
+        PluginAutofillPlanResultVO sanitized = newService().sanitizePlan(llm, List.of(eduTypeField));
+
+        assertThat(sanitized.getAssignments()).isEmpty();
+        assertThat(sanitized.getBlockedFields()).hasSize(1);
+        PluginBlockedFieldDto b = sanitized.getBlockedFields().get(0);
+        assertThat(b.getSelector()).isEqualTo("#edu-type");
+        assertThat(b.getReason()).isEqualTo("no_mapping");
+    }
+
+    @Test
+    void emptyValueWithoutSkipReason_shouldBeDroppedSilently() {
+        PluginPageFormFieldDto field = new PluginPageFormFieldDto();
+        field.setSelector("#x");
+        field.setTagName("input");
+
+        PluginAutofillPlanResultVO llm = PluginAutofillPlanResultVO.builder()
+                .fillable(true)
+                .assignments(List.of(PluginFieldAssignmentDto.builder()
+                        .selector("#x").value("  ").build()))
+                .blockedFields(List.of())
+                .build();
+
+        PluginAutofillPlanResultVO sanitized = newService().sanitizePlan(llm, List.of(field));
+
+        // 无值且无 skipReason 的 assignment 维持原行为：剔除，不进 blocked
+        assertThat(sanitized.getAssignments()).isEmpty();
+        assertThat(sanitized.getBlockedFields()).isEmpty();
+    }
+
+    @Test
     void llmTimeout_shouldDegradeToDeterministicResultInsteadOfFailing() {
         PluginAutofillAssistant assistant = mock(PluginAutofillAssistant.class);
         BillingService billingService = mock(BillingService.class);
