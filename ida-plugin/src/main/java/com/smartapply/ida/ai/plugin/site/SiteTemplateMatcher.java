@@ -215,6 +215,7 @@ public class SiteTemplateMatcher {
                 .dataFormFieldId(field.getDataFormFieldId())
                 .i18nLabel(field.getI18nLabel())
                 .clientFieldKey(field.getClientFieldKey())
+                .labelText(field.getLabelText())
                 .build();
     }
 

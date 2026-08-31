@@ -51,11 +51,17 @@ class ChineseFieldAliasTableTest {
         assertThat(ChineseFieldAliasTable.resolveByLabel("学历类型")).isEqualTo("education.0.isFullTime");
         assertThat(ChineseFieldAliasTable.resolveByLabel("是否全日制")).isEqualTo("education.0.isFullTime");
         assertThat(ChineseFieldAliasTable.resolveByLabel("当前居住城市")).isEqualTo("location.currentCity");
+        assertThat(ChineseFieldAliasTable.resolveByLabel("获奖大赛")).isEqualTo("award.0.awardName");
+        assertThat(ChineseFieldAliasTable.resolveByLabel("语言考试")).isEqualTo("language.0.certName");
+        assertThat(ChineseFieldAliasTable.resolveByLabel("考试分数")).isEqualTo("language.0.certScore");
         // 所有新增/存量静态别名路径都必须在 ResumeFieldAccessor 注册
         assertThat(ResumeFieldAccessor.isKnownKey("job.expectedCities")).isTrue();
         assertThat(ResumeFieldAccessor.isKnownKey("work.0.jobTitle")).isTrue();
         assertThat(ResumeFieldAccessor.isKnownKey("education.0.enrollDate")).isTrue();
         assertThat(ResumeFieldAccessor.isKnownKey("education.0.isFullTime")).isTrue();
+        assertThat(ResumeFieldAccessor.isKnownKey("award.0.awardName")).isTrue();
+        assertThat(ResumeFieldAccessor.isKnownKey("language.0.certName")).isTrue();
+        assertThat(ResumeFieldAccessor.isKnownKey("language.0.certScore")).isTrue();
     }
 
     @Test

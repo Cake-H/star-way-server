@@ -174,6 +174,24 @@ public final class ChineseFieldAliasTable {
         put(m,"项目开始时间", "project.0.startDate");
         put(m,"项目结束时间", "project.0.endDate");
 
+        // ===== 奖项（默认索引 0） =====
+        put(m,"获奖大赛", "award.0.awardName");
+        put(m,"竞赛名称", "award.0.awardName");
+        put(m,"比赛名称", "award.0.awardName");
+        put(m,"奖项名称", "award.0.awardName");
+
+        // ===== 语言能力（默认索引 0） =====
+        // 注意：「语言水平/熟练程度」类字段值域因平台而异，刻意不加别名，交 LLM 结合选项名录处理
+        put(m,"语言类型", "language.0.languageName");
+        put(m,"语种", "language.0.languageName");
+        put(m,"语言考试", "language.0.certName");
+        put(m,"外语考试", "language.0.certName");
+        put(m,"考试分数", "language.0.certScore");
+        put(m,"考试成绩", "language.0.certScore");
+
+        // 说明：「在校时间/在职时间/项目时间」是起止区间语义，确定性层只能取单边值，
+        // 填一半比不填更糟，刻意不加别名，交 LLM 用简历起止日期拼接
+
         LABEL_TO_FIELD = Collections.unmodifiableMap(m);
     }
 

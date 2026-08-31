@@ -2,7 +2,9 @@ package com.smartapply.ida.ai.plugin.deterministic;
 
 import com.smartapply.ida.common.domain.plugin.autofill.PluginFieldAssignmentDto;
 import com.smartapply.ida.common.domain.plugin.autofill.PluginPageFormFieldDto;
+import com.smartapply.ida.common.domain.resume.dto.parse.ResumeAwardDraftLine;
 import com.smartapply.ida.common.domain.resume.dto.parse.ResumeEducationDraftLine;
+import com.smartapply.ida.common.domain.resume.dto.parse.ResumeLanguageDraftLine;
 import com.smartapply.ida.common.domain.resume.dto.parse.ResumeParseDraftDto;
 import com.smartapply.ida.common.domain.resume.dto.parse.ResumeProjectDraftLine;
 import org.junit.jupiter.api.Test;
@@ -280,5 +282,45 @@ class DeterministicFieldMatcherTest {
 
         assertThat(result.getMatchedAssignments()).hasSize(1);
         assertThat(result.getMatchedAssignments().get(0).getValue()).isEqualTo("深圳");
+    }
+
+    @Test
+    void awardAndLanguageLabels_shouldMapToIndexedEntries() {
+        DynamicFieldAliasService aliasService = mock(DynamicFieldAliasService.class);
+        DeterministicFieldMatcher matcher = new DeterministicFieldMatcher(aliasService);
+
+        ResumeParseDraftDto draft = new ResumeParseDraftDto();
+        ResumeAwardDraftLine award = new ResumeAwardDraftLine();
+        award.setAwardName("蓝桥杯全国软件大赛");
+        draft.setAwards(List.of(award));
+        ResumeLanguageDraftLine lang = new ResumeLanguageDraftLine();
+        lang.setCertName("英语六级");
+        lang.setCertScore("520");
+        draft.setLanguages(List.of(lang));
+
+        DeterministicMatchResult result = matcher.matchAll(List.of(
+                textField("#award", "获奖大赛"),
+                textField("#cert", "语言考试"),
+                textField("#score", "考试分数")), draft);
+
+        assertThat(result.getMatchedAssignments()).hasSize(3);
+        assertThat(result.getMatchedAssignments().stream().map(PluginFieldAssignmentDto::getValue))
+                .containsExactly("蓝桥杯全国软件大赛", "英语六级", "520");
+    }
+
+    @Test
+    void deterministicAssignment_shouldCarryLabelText() {
+        DynamicFieldAliasService aliasService = mock(DynamicFieldAliasService.class);
+        DeterministicFieldMatcher matcher = new DeterministicFieldMatcher(aliasService);
+
+        ResumeParseDraftDto draft = new ResumeParseDraftDto();
+        draft.setFullName("黄晋豪");
+
+        DeterministicMatchResult result = matcher.matchAll(
+                List.of(textField("#name", "姓名")), draft);
+
+        // labelText 从快照回填进 assignment，供前端做选择器漂移校验
+        assertThat(result.getMatchedAssignments()).hasSize(1);
+        assertThat(result.getMatchedAssignments().get(0).getLabelText()).isEqualTo("姓名");
     }
 }

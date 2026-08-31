@@ -49,6 +49,12 @@ public class PluginFieldAssignmentDto {
     private String clientFieldKey;
 
     /**
+     * 页面快照中该字段的题面文案（labelText），服务端从快照回填。
+     * 前端在 selector/锚点失效时用它做选择器漂移校验：题面对不上则拒绝填入，防止填错字段。
+     */
+    private String labelText;
+
+    /**
      * 备选值列表（按优先级排序），前端在首选 value 匹配不到下拉选项时依次尝试。
      * 后端更了解简历原始数据和选项列表上下文，提供备选值可提高命中率。
      * 例：学历字段 ["大学本科", "本科", "Bachelor"]

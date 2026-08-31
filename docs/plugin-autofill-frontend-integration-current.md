@@ -198,6 +198,7 @@
 | `skipReason` | string \| null | 「仍要写入但需解释不确定性」时用，如 `ambiguous`、`no_matching_option`（已归一为小写）；与 blockedFields 的「不自动填」语义不同 |
 | `userHint` | string \| null | 给用户的极短说明，可配黄框/二次确认 |
 | `dataFormFieldId` / `i18nLabel` / `clientFieldKey` | string \| null | 请求快照带入的锚点，服务端已合并回显（模型漏抄时从快照补齐） |
+| `labelText` | string \| null | 该字段在页面快照中的题面文案，服务端从快照回填；selector/锚点失效时用它做漂移校验，题面对不上应拒绝填入 |
 | `fallbackValues` | string[] | 下拉备选值，按优先级排序；首选 `value` 匹配不到选项时依次尝试 |
 | `subAssignments` | array | 复合字段子赋值：`{selector, value, targetRole, optionLabelsSample}`；`selector` 同样保证来自快照；`targetRole` 值域见 §6.3 |
 

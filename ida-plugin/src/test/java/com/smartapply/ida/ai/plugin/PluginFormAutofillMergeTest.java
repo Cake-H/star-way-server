@@ -96,6 +96,55 @@ class PluginFormAutofillMergeTest {
     }
 
     @Test
+    void llmAssignmentWithFlatKeyCoveredByUpperLayer_shouldBeDropped() {
+        // 确定性层已用 basic.email 填了 #email1；LLM 对同 key 的另一控件 #email2 输出不同值 → 丢弃防双写
+        DeterministicMatchResult det = DeterministicMatchResult.builder()
+                .matchedAssignments(List.of(PluginFieldAssignmentDto.builder()
+                        .selector("#email1").value("a@x.com").clientFieldKey("basic.email").build()))
+                .unmatchedFields(List.of())
+                .build();
+        PluginAutofillPlanResultVO llm = PluginAutofillPlanResultVO.builder()
+                .fillable(true)
+                .assignments(List.of(
+                        PluginFieldAssignmentDto.builder()
+                                .selector("#email2").value("b@x.com").clientFieldKey("basic.email").build(),
+                        // 集合键不参与去重：多块表单允许同路径不同 selector
+                        PluginFieldAssignmentDto.builder()
+                                .selector("#school2").value("江苏科技大学")
+                                .clientFieldKey("education.0.schoolName").build()))
+                .blockedFields(List.of())
+                .build();
+
+        PluginAutofillPlanResultVO merged = newService().mergeResults(
+                SiteTemplateMatchResult.empty(List.of()), det, llm);
+
+        assertThat(merged.getAssignments()).hasSize(2);
+        assertThat(merged.getAssignments().stream().map(PluginFieldAssignmentDto::getSelector))
+                .containsExactly("#email1", "#school2");
+    }
+
+    @Test
+    void sanitizePlan_shouldBackfillLabelTextFromSnapshot() {
+        PluginPageFormFieldDto nameField = new PluginPageFormFieldDto();
+        nameField.setSelector("#name");
+        nameField.setTagName("input");
+        nameField.setLabelText("姓名");
+
+        PluginAutofillPlanResultVO llm = PluginAutofillPlanResultVO.builder()
+                .fillable(true)
+                .assignments(List.of(PluginFieldAssignmentDto.builder()
+                        .selector("#name").value("黄晋豪").build()))
+                .blockedFields(List.of())
+                .build();
+
+        PluginAutofillPlanResultVO sanitized = newService().sanitizePlan(llm, List.of(nameField));
+
+        assertThat(sanitized.getAssignments()).hasSize(1);
+        // labelText 是前端选择器漂移校验的最后防线，必须从快照回填
+        assertThat(sanitized.getAssignments().get(0).getLabelText()).isEqualTo("姓名");
+    }
+
+    @Test
     void compoundFieldWithPlainValue_shouldBeWrappedAsSubAssignment() {
         // 快照：起止时间的开始日期控件（复合段 date_start）
         PluginPageFormFieldDto dateField = new PluginPageFormFieldDto();

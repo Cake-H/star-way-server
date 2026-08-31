@@ -382,11 +382,16 @@ public class PluginFormAutofillAiService {
                                                     PluginAutofillPlanResultVO llmResult) {
         List<PluginFieldAssignmentDto> merged = new ArrayList<>();
         Set<String> coveredSelectors = new HashSet<>();
+        // 上层已赋值的扁平 clientFieldKey（basic.*、location.* 等单实例字段）：
+        // LLM 层若对同 key 的不同 selector 再输出 assignment，说明是同一字段的重复/漂移映射，
+        // 拒绝以防止「同字段两个控件双写不同值」。集合键（education.0.*）涉及多块表单语义，不参与去重
+        Set<String> coveredFlatKeys = new HashSet<>();
 
         // 第 1 层：模板匹配（最高优先级）
         if (templateResult.getMatchedAssignments() != null) {
             for (PluginFieldAssignmentDto a : templateResult.getMatchedAssignments()) {
                 coveredSelectors.add(normalizeSelectorKey(a.getSelector()));
+                addFlatKey(coveredFlatKeys, a.getClientFieldKey());
                 merged.add(a);
             }
         }
@@ -396,18 +401,26 @@ public class PluginFormAutofillAiService {
             String normSel = normalizeSelectorKey(a.getSelector());
             if (!coveredSelectors.contains(normSel)) {
                 coveredSelectors.add(normSel);
+                addFlatKey(coveredFlatKeys, a.getClientFieldKey());
                 merged.add(a);
             }
         }
 
-        // 第 3 层：LLM（跳过上层已覆盖的 selector）
+        // 第 3 层：LLM（跳过上层已覆盖的 selector 与扁平 clientFieldKey）
         if (llmResult.getAssignments() != null) {
             for (PluginFieldAssignmentDto a : llmResult.getAssignments()) {
                 String normSel = normalizeSelectorKey(a.getSelector());
-                if (!coveredSelectors.contains(normSel)) {
-                    coveredSelectors.add(normSel);
-                    merged.add(a);
+                if (coveredSelectors.contains(normSel)) {
+                    continue;
                 }
+                String ck = a.getClientFieldKey();
+                if (ck != null && coveredFlatKeys.contains(ck)) {
+                    log.info("LLM assignment 与上层扁平 clientFieldKey 重复，丢弃防双写: selector={}, clientFieldKey={}",
+                            a.getSelector(), ck);
+                    continue;
+                }
+                coveredSelectors.add(normSel);
+                merged.add(a);
             }
         }
 
@@ -455,6 +468,13 @@ public class PluginFormAutofillAiService {
             out.addAll(second);
         }
         return out;
+    }
+
+    /** 扁平（非集合）clientFieldKey 才计入去重集：basic.email 计入，education.0.schoolName 等多块语义不计 */
+    private static void addFlatKey(Set<String> coveredFlatKeys, String clientFieldKey) {
+        if (StringUtils.hasText(clientFieldKey) && !clientFieldKey.matches("^\\w+\\.\\d+\\.\\w+$")) {
+            coveredFlatKeys.add(clientFieldKey);
+        }
     }
 
     /** 合并两个 blockedFields 列表，按规范化 selector 去重，保留先出现者 */
@@ -802,6 +822,9 @@ public class PluginFormAutofillAiService {
         }
         if (!StringUtils.hasText(a.getClientFieldKey()) && StringUtils.hasText(field.getClientFieldKey())) {
             a.setClientFieldKey(field.getClientFieldKey());
+        }
+        if (!StringUtils.hasText(a.getLabelText()) && StringUtils.hasText(field.getLabelText())) {
+            a.setLabelText(field.getLabelText());
         }
     }
 
