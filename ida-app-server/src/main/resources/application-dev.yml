@@ -44,6 +44,15 @@ ida:
       # 仅本地联调允许 X-User-Id 直接指定用户；生产必须为 false（默认）
       user-id-header-enabled: true
 
+  # 模拟登录：白名单手机号用固定验证码 246810 直接登录，不发真实短信、不受频控（仅本地/测试，生产禁止开启）
+  sms:
+    code:
+      mock-code-enabled: true
+      mock-phones:
+        - 13800000000
+        - 13800000001
+      mock-code: "246810"
+
   server:
     access-host: ${IDA_ACCESS_HOST:127.0.0.1}
     api-v1-prefix: /api/v1/app

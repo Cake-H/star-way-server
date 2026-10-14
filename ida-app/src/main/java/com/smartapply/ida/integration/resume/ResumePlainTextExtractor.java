@@ -25,14 +25,15 @@ import java.util.List;
 @Component
 public class ResumePlainTextExtractor {
 
-    private static final long MAX_BYTES = 15 * 1024 * 1024;
+    public static final long MAX_BYTES = 15 * 1024 * 1024;
+    public static final String SIZE_EXCEEDED_MESSAGE = "文件过大，请上传不超过 15MB 的简历";
 
     /**
      * @return 非空则已 trim；若为空串说明可能为扫描件
      */
     public String extract(MultipartFile file) throws Exception {
         if (file.getSize() > MAX_BYTES) {
-            throw new BusinessException("文件过大，请上传不超过 15MB 的简历");
+            throw new BusinessException(SIZE_EXCEEDED_MESSAGE);
         }
         String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
         if (name.endsWith(".pdf")) {

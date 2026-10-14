@@ -4,18 +4,23 @@ import com.smartapply.ida.ai.langchain4j.config.LangChain4jProperties;
 import com.smartapply.ida.ai.resume.ResumeArkStructuringService;
 import com.smartapply.ida.common.domain.resume.vo.ResumeParseResultVO;
 import com.smartapply.ida.common.exception.BusinessException;
+import com.smartapply.ida.config.executor.ResumeParseExecutorConfig;
 import com.smartapply.ida.integration.oss.AliyunOssStorageService;
 import com.smartapply.ida.integration.resume.ResumePlainTextExtractor;
 import com.smartapply.ida.module.app.resume.service.AppResumeUploadParseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * App 端：简历上传 → OSS 存档 → 本地抽取纯文本 → 大模型结构化。
@@ -43,6 +48,9 @@ public class AppResumeUploadParseSeviceImpl implements AppResumeUploadParseServi
     private final ResumeArkStructuringService arkStructuringService;
     private final LangChain4jProperties langChain4jProperties;
 
+    @Qualifier(ResumeParseExecutorConfig.BEAN_NAME)
+    private final ThreadPoolTaskExecutor resumeParseExecutor;
+
     /**
      * 同步执行完整解析链路，返回可供前端编辑的草稿 VO（含 OSS 元信息、解析备注与草稿 DTO）。
      *
@@ -57,10 +65,44 @@ public class AppResumeUploadParseSeviceImpl implements AppResumeUploadParseServi
         }
 
         // 步骤 1：原件上传 OSS，与「解析结果」分离存储，满足追溯与合规要求
-        AliyunOssStorageService.OssUploadResult put = oss.uploadResume(file, userId);
+        // AliyunOssStorageService.OssUploadResult put = oss.uploadResume(file, userId);
+        CompletableFuture<AliyunOssStorageService.OssUploadResult> ossFuture =
+                CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return oss.uploadResume(file, userId);
+                    } catch (Exception e) {
+                        throw new CompletionException(e);
+                    }
+                }, resumeParseExecutor);
 
         // 步骤 2：同一次请求内从内存中的 MultipartFile 抽文本，避免「上传后再从 OSS 拉回」的二次 IO
-        String plain = plainTextExtractor.extract(file);
+        // String plain = plainTextExtractor.extract(file);
+        CompletableFuture<String> plainFuture =
+                CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return plainTextExtractor.extract(file);
+                    } catch (Exception e) {
+                        throw new CompletionException(e);
+                    }
+                }, resumeParseExecutor);
+
+        AliyunOssStorageService.OssUploadResult put;
+        String plain;
+        try {
+            put = ossFuture.join();
+            plain = plainFuture.join();
+        } catch (CompletionException ce) {
+            Throwable cause = ce.getCause();  // 剥掉外壳，取出原始异常
+            if (cause instanceof BusinessException be) {
+                throw be; // 业务异常原样抛，前端能看到正确文案
+            }
+            if (cause instanceof Exception e) {
+                throw e; // 方法签名有 throws Exception，直接抛出原始异常
+            }
+            throw ce; // 其他异常也原样抛出
+        }
+
+
 
         // 步骤 3：按配置截断过长正文，并把原因写入 parseNotes，供前端提示用户补全
         List<String> notes = new ArrayList<>();

@@ -68,6 +68,10 @@ ida:
       length: 6
       ttl-seconds: 300
       resend-interval-seconds: 60
+      # 模拟登录（仅测试环境）：白名单手机号用固定验证码直接登录，不发真实短信、不受频控；生产必须为 false
+      mock-code-enabled: false
+      mock-phones: []
+      mock-code: "246810"
 
   crypto:
     bcrypt:

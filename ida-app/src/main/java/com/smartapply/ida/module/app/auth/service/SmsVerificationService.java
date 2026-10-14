@@ -35,9 +35,18 @@ public class SmsVerificationService {
 
     /**
      * 生成验证码、写入 Redis 并调用短信实现类；频控未通过时抛出 {@link BusinessException}。
+     * 白名单模拟号直接写固定码，跳过频控与短信通道（见 {@link SmsVerificationProperties#isMockCodeEnabled()}）。
      */
     public void sendCode(String phone) throws Exception {
         String normalized = normalizePhone(phone);
+        String codeKey = verificationProperties.getRedisCodeKeyPrefix() + normalized;
+        if (isMockPhone(normalized)) {
+            // 模拟号：写固定码即可，登录走 verifyAndConsume 的 mock 分支，不依赖该缓存；生产请关闭 mock-code-enabled
+            stringRedisTemplate.opsForValue()
+                    .set(codeKey, verificationProperties.getMockCode(), Duration.ofSeconds(verificationProperties.getTtlSeconds()));
+            log.warn("[MOCK] 模拟验证码已写入 phone={}（仅测试环境）", SensitiveDataMasker.maskMiddle(normalized));
+            return;
+        }
         String rateKey = verificationProperties.getRedisRateKeyPrefix() + normalized;
         // setIfAbsent：同一手机号在间隔内只能占坑一次，占失败说明刚发过，直接拒绝（防刷短信费）
         Boolean first = stringRedisTemplate.opsForValue()
@@ -46,7 +55,6 @@ public class SmsVerificationService {
             throw new BusinessException("发送过于频繁，请 " + verificationProperties.getResendIntervalSeconds() + " 秒后再试");
         }
         String code = randomDigits(verificationProperties.getLength());
-        String codeKey = verificationProperties.getRedisCodeKeyPrefix() + normalized;
         // 先发码再调通道：失败时要删掉 rate + code，否则用户既收不到短信又进不了冷却重试
         stringRedisTemplate.opsForValue()
                 .set(codeKey, code, Duration.ofSeconds(verificationProperties.getTtlSeconds()));
@@ -63,6 +71,7 @@ public class SmsVerificationService {
 
     /**
      * 比对验证码，成功则删除 Redis 中的码（一次性消费）；失败不删，便于用户重试直至过期。
+     * 白名单模拟号直接比对固定码，不消费、不过期，可反复登录（见 {@link SmsVerificationProperties#isMockCodeEnabled()}）。
      *
      * @return true 表示校验通过并已删除缓存
      */
@@ -71,6 +80,9 @@ public class SmsVerificationService {
             return false;
         }
         String normalized = normalizePhone(phone);
+        if (isMockPhone(normalized)) {
+            return verificationProperties.getMockCode().equals(inputCode.trim());
+        }
         String codeKey = verificationProperties.getRedisCodeKeyPrefix() + normalized;
         String cached = stringRedisTemplate.opsForValue().get(codeKey);
         if (cached == null) {
@@ -84,7 +96,13 @@ public class SmsVerificationService {
     }
 
     private static String normalizePhone(String phone) {
-        return phone == null ? "" : phone.trim();
+        return phone == null ? "" : phone.trim(); // 去掉首位的空格等空白字符
+    }
+
+    /** 是否为模拟登录白名单手机号 */
+    private boolean isMockPhone(String normalized) {
+        return verificationProperties.isMockCodeEnabled()
+                && verificationProperties.getMockPhones().contains(normalized);
     }
 
     private static String randomDigits(int len) {

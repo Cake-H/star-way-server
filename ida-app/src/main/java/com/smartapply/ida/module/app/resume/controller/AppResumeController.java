@@ -3,13 +3,11 @@ package com.smartapply.ida.module.app.resume.controller;
 import com.smartapply.ida.common.domain.ResponseDTO;
 import com.smartapply.ida.common.domain.resume.dto.ResumeSaveDraftRequest;
 import com.smartapply.ida.common.domain.resume.dto.ResumeUpdateRequest;
-import com.smartapply.ida.common.domain.resume.vo.ResumeDetailVO;
-import com.smartapply.ida.common.domain.resume.vo.ResumeListItemVO;
-import com.smartapply.ida.common.domain.resume.vo.ResumeParseResultVO;
-import com.smartapply.ida.common.domain.resume.vo.ResumeSaveDraftResultVO;
+import com.smartapply.ida.common.domain.resume.vo.*;
 import com.smartapply.ida.constant.ApiRouteConstants;
 import com.smartapply.ida.http.annotation.RequestUserId;
 import com.smartapply.ida.module.app.resume.service.AppResumeDraftService;
+import com.smartapply.ida.module.app.resume.service.AppResumeParseTaskService;
 import com.smartapply.ida.module.app.resume.service.AppResumeQueryService;
 import com.smartapply.ida.module.app.resume.service.AppResumeUploadParseService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -59,6 +58,7 @@ public class AppResumeController {
     private final AppResumeUploadParseService appResumeUploadParseService;
     private final AppResumeDraftService appResumeDraftService;
     private final AppResumeQueryService appResumeQueryService;
+    private final AppResumeParseTaskService appResumeParseTaskService;
 
     /**
      * 上传原件并走「OSS + 纯文本抽取 + 大模型结构化」流水线，返回可编辑草稿。
@@ -74,6 +74,22 @@ public class AppResumeController {
             @RequestParam("file") MultipartFile file) throws Exception {
         log.info("收到上传简历并智能解析申请，/upload-parse userId={} filename={} size={}", userId, file.getOriginalFilename(), file.getSize());
         return ResponseDTO.ok(appResumeUploadParseService.uploadAndParse(userId, file));
+    }
+
+    @Operation(summary = "上传简历并异步解析（返回 taskId，轮询取结果）")
+    @PostMapping(value = "/upload-parse/tasks", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseDTO<String> uploadParseAsync(@RequestUserId(required = true) Long userId,
+                                                @RequestParam("file") MultipartFile file) throws IOException {
+        log.info("收到上传简历并异步解析申请，/upload-parse/tasks userId={} filename={} size={}", userId, file.getOriginalFilename(), file.getSize());
+        return ResponseDTO.ok(appResumeParseTaskService.submit(userId, file));
+    }
+
+    @Operation(summary = "轮询简历解析任务状态")
+    @GetMapping("/upload-parse/tasks/{taskId}")
+    public ResponseDTO<ResumeParseTaskStatusVO> queryParseTask(@RequestUserId(required = true) Long userId,
+                                                               @PathVariable String taskId) {
+        log.info("收到轮询简历解析任务状态申请，/upload-parse/tasks/{} userId={}", taskId, userId);
+        return ResponseDTO.ok(appResumeParseTaskService.query(userId, taskId));
     }
 
     /**

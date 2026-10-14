@@ -8,19 +8,24 @@ import com.smartapply.ida.common.domain.resume.support.ResumeDraftModuleCountsEx
 import com.smartapply.ida.common.domain.resume.vo.ResumeDetailVO;
 import com.smartapply.ida.common.domain.resume.vo.ResumeListItemVO;
 import com.smartapply.ida.common.exception.BusinessException;
+import com.smartapply.ida.config.executor.ResumeQueryExecutorConfig;
 import com.smartapply.ida.module.app.resume.assembler.ResumeViewAssembler;
 import com.smartapply.ida.module.app.resume.mapper.*;
+import com.smartapply.ida.module.app.resume.service.AppResumeDraftService;
 import com.smartapply.ida.module.app.resume.service.AppResumeQueryService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
  * 简历「读模型」实现：只查库、装配 VO，不做任何 INSERT/UPDATE/DELETE。
  * <p>
- * <b>为何单独成类：</b>与 {@link com.smartapply.ida.module.app.resume.service.AppResumeDraftService} 的写路径分离，
+ * <b>为何单独成类：</b>与 {@link AppResumeDraftService} 的写路径分离，
  * 以后若对列表/详情做缓存、字段裁剪或审计日志，不会与保存草稿的事务搅在一起。
  */
 @Service
@@ -37,6 +42,9 @@ public class AppResumeQueryServiceImpl implements AppResumeQueryService {
     private final ResumeCertificateMapper resumeCertificateMapper;
     private final ResumeAwardMapper resumeAwardMapper;
     private final ResumePublicationMapper resumePublicationMapper;
+
+    @Qualifier(ResumeQueryExecutorConfig.BEAN_NAME)
+    private final ThreadPoolTaskExecutor resumeQueryExecutor;
 
     /**
      * 单份简历在 9 张子表中的全部行，按 {@code sort_order} 升序已排好序，
@@ -158,16 +166,16 @@ public class AppResumeQueryServiceImpl implements AppResumeQueryService {
      * 一次性加载 9 张子表；每张表单独一个查询方法，避免泛型魔法，方便新人按表名跳转。
      */
     private ResumeChildSnapshot loadChildSnapshot(long resumeId) {
-        return new ResumeChildSnapshot(
-                listEducations(resumeId),
-                listWorks(resumeId),
-                listProjects(resumeId),
-                listCampus(resumeId),
-                listSkills(resumeId),
-                listLanguages(resumeId),
-                listCertificates(resumeId),
-                listAwards(resumeId),
-                listPublications(resumeId));
+        CompletableFuture<List<ResumeEducation>> f1 = CompletableFuture.supplyAsync(() -> listEducations(resumeId), resumeQueryExecutor);
+        CompletableFuture<List<ResumeWork>> f2 = CompletableFuture.supplyAsync(() -> listWorks(resumeId), resumeQueryExecutor);
+        CompletableFuture<List<ResumeProject>> f3 = CompletableFuture.supplyAsync(() -> listProjects(resumeId), resumeQueryExecutor);
+        CompletableFuture<List<ResumeCampus>> f4 = CompletableFuture.supplyAsync(() -> listCampus(resumeId), resumeQueryExecutor);
+        CompletableFuture<List<ResumeSkill>> f5 = CompletableFuture.supplyAsync(() -> listSkills(resumeId), resumeQueryExecutor);
+        CompletableFuture<List<ResumeLanguage>> f6 = CompletableFuture.supplyAsync(() -> listLanguages(resumeId), resumeQueryExecutor);
+        CompletableFuture<List<ResumeCertificate>> f7 = CompletableFuture.supplyAsync(() -> listCertificates(resumeId), resumeQueryExecutor);
+        CompletableFuture<List<ResumeAward>> f8 = CompletableFuture.supplyAsync(() -> listAwards(resumeId), resumeQueryExecutor);
+        CompletableFuture<List<ResumePublication>> f9 = CompletableFuture.supplyAsync(() -> listPublications(resumeId), resumeQueryExecutor);
+        return new ResumeChildSnapshot(f1.join(), f2.join(), f3.join(), f4.join(), f5.join(), f6.join(), f7.join(), f8.join(), f9.join());
     }
 
     /** 教育经历：按 {@code sort_order} 升序，与保存草稿时插入顺序一致。 */
