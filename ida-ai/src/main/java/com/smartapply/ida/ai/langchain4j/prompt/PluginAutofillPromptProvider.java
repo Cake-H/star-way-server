@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 public class PluginAutofillPromptProvider {
 
     /**
-     * 系统提示词：原 PluginAutofillPrompts.SYSTEM 的内容（含 PART_A 相关性裁剪规则）。
+     * 系统提示词
      */
     public static final String SYSTEM = """
             你是「智能投递助手」浏览器插件中的网申填表规划专家。根据用户已保存的结构化简历 JSON（PART_A）、
@@ -70,7 +70,7 @@ public class PluginAutofillPromptProvider {
             """;
 
     /**
-     * 用户消息前缀：与原 PluginAutofillPrompts.USER_PREFIX 完全一致。
+     * 用户消息前缀
      */
     public static final String USER_PREFIX = """
             以下 PART_A 为用户简历 JSON，PART_B 为当前页表单控件列表 JSON，PART_C 为云简历各可重复模块的条目数量。请只输出一个 JSON 对象。
@@ -79,7 +79,7 @@ public class PluginAutofillPromptProvider {
             """;
 
     /**
-     * 用户消息中段：与原 PluginAutofillPrompts.USER_MIDDLE 完全一致。
+     * 用户消息中段
      */
     public static final String USER_MIDDLE = """
 
@@ -87,7 +87,7 @@ public class PluginAutofillPromptProvider {
             """;
 
     /**
-     * PART_C 前缀：与原 PluginAutofillPrompts.USER_PARTC_PREFIX 完全一致。
+     * PART_C 前缀
      */
     public static final String USER_PARTC_PREFIX = """
 
@@ -96,8 +96,6 @@ public class PluginAutofillPromptProvider {
 
     /**
      * 构建完整用户消息。
-     * <p>
-     * 与原 PluginFormAutofillAiService 中的拼接逻辑完全一致。
      */
     public String buildUserMessage(String resumeJson, String pageJson, String moduleCountsJson) {
         return USER_PREFIX + resumeJson + USER_MIDDLE + pageJson + USER_PARTC_PREFIX + moduleCountsJson;

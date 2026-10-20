@@ -41,6 +41,12 @@ public class LangChain4jProperties {
      * 模拟面试题目生成配置
      */
     private ModelConfig mockInterview = new ModelConfig();
+
+
+    /**
+     * 投递记录获取配置
+     */
+    private JobApplicationParseConfig jobApplicationParse = new JobApplicationParseConfig();
     /**
      * 通用模型配置。
      */
@@ -97,6 +103,14 @@ public class LangChain4jProperties {
          * 简历纯文本最大字符数，超出则截断。
          */
         private int maxPlainTextChars = 80000;
+    }
+
+    /**
+     * 投递信息获取专用配置
+     */
+    @Data
+    public static class JobApplicationParseConfig extends ModelConfig {
+        private int maxPlainTextChars = 8000;
     }
 
     /**

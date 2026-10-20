@@ -109,6 +109,12 @@ ida:
       max-tokens: 8192
       read-timeout-ms: 300000
       response-format-json-object: true
+    job-application-parse:
+      model: deepseek-v4-flash
+      temperature: 0.1
+      max-tokens: 8192
+      read-timeout-ms: 60000
+      response-format-json-object: true
 
   # 额度计费 — 防止 AI 放量亏损（ida_v5_billing.sql）
   billing:

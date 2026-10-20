@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 public class ResumeParsePromptProvider {
 
     /**
-     * 系统提示词：以原 ResumeParsePrompts.SYSTEM 为基础，新增长文本原文保留硬约束。
+     * 系统提示词
      */
     public static final String SYSTEM = """
             你是招聘简历信息抽取助手。只根据用户给出的简历纯文本推断字段，不得编造未出现的信息。
@@ -25,7 +25,7 @@ public class ResumeParsePromptProvider {
             """;
 
     /**
-     * 用户消息指令：与原 ResumeParsePrompts.USER_INSTRUCTION 完全一致。
+     * 用户消息指令
      */
     public static final String USER_INSTRUCTION = """
             下面是一份求职者简历的全文（可能排版混乱）。请抽取信息并输出 JSON，顶层字段与子数组名称必须严格使用下列键名（camelCase）：
@@ -56,7 +56,7 @@ public class ResumeParsePromptProvider {
             """;
 
     /**
-     * 用户消息后缀：与原 ResumeParsePrompts.USER_SUFFIX 完全一致。
+     * 用户消息后缀
      */
     public static final String USER_SUFFIX = """
 
@@ -66,8 +66,6 @@ public class ResumeParsePromptProvider {
 
     /**
      * 构建完整用户消息。
-     * <p>
-     * 与原简历解析服务中的拼接逻辑完全一致。
      */
     public String buildUserMessage(String resumeText) {
         return USER_INSTRUCTION + resumeText + USER_SUFFIX;

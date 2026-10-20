@@ -16,6 +16,8 @@ public final class AiUsageBizType {
 
     /** 模拟面试题目生成 */
     public static final String MOCK_INTERVIEW_GENERATE = "mock_interview_generate";
+    /** 投递记录获取 */
+    public static final String JOB_APPLICATION_PARSE = "job_application_parse";
 
     private AiUsageBizType() {
     }

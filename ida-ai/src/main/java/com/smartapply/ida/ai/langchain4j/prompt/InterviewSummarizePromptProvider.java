@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 public class InterviewSummarizePromptProvider {
 
     /**
-     * 系统提示词：与原 InterviewSummarizePrompts.SYSTEM 完全一致。
+     * 系统提示词
      */
     public static final String SYSTEM = """
             你是「面试复盘结构化助手」。用户会提供一场面试后的口述或转写文本。
@@ -63,8 +63,6 @@ public class InterviewSummarizePromptProvider {
 
     /**
      * 构建用户消息。
-     * <p>
-     * 与原 InterviewSummarizePrompts.buildUserMessage 逻辑完全一致。
      */
     public String buildUserMessage(String today, String dbCompany, String dbPosition,
                                    String dbRound, String dbInterviewAt, String transcript) {

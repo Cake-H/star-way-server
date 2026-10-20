@@ -1,9 +1,6 @@
 package com.smartapply.ida.ai.langchain4j.config;
 
-import com.smartapply.ida.ai.langchain4j.assistant.InterviewSummarizeAssistant;
-import com.smartapply.ida.ai.langchain4j.assistant.MockInterviewGenerateAssistant;
-import com.smartapply.ida.ai.langchain4j.assistant.PluginAutofillAssistant;
-import com.smartapply.ida.ai.langchain4j.assistant.ResumeParseAssistant;
+import com.smartapply.ida.ai.langchain4j.assistant.*;
 import com.smartapply.ida.ai.usage.TokenUsageCaptureListener;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiChatRequestParameters;
@@ -59,6 +56,11 @@ public class LangChain4jAutoConfiguration {
         return buildChatModel(properties.getMockInterview(), "模拟面试题目生成");
     }
 
+    @Bean("jobApplicationParseChatModel")
+    @ConditionalOnMissingBean(name = "jobApplicationParseChatModel")
+    public OpenAiChatModel jobApplicationParseChatModel() {
+        return buildChatModel(properties.getJobApplicationParse(), "投递记录获取");
+    }
     // ==================== AI Service Beans ====================
 
     @Bean
@@ -100,6 +102,17 @@ public class LangChain4jAutoConfiguration {
                 .chatModel(chatModel)
                 .build();
     }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public JobApplicationParseAssistant jobApplicationParseAssistant(
+            @Qualifier("jobApplicationParseChatModel") OpenAiChatModel chatModel) {
+        log.info("[LangChain4j] 创建 JobApplicationParseAssistant");
+        return AiServices.builder(JobApplicationParseAssistant.class)
+                .chatModel(chatModel)
+                .build();
+    }
+
 
     // ==================== Private Methods ====================
 
