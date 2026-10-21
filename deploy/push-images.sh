@@ -10,12 +10,12 @@
 # 前置条件：
 #   1. 已安装并启动 Docker Desktop
 #   2. 已登录镜像仓库：
-#      docker login --username=<阿里云账号> ccr.ccs.tencentyun.com
+#      docker login --username=aliyun2936033226 crpi-57bx5zcp97h0pj85.cn-guangzhou.personal.cr.aliyuncs.com
 #      （密码为 ACR 控制台「访问凭证」里设置的固定密码）
 # ============================================================
 set -e
 
-REGISTRY="ccr.ccs.tencentyun.com"
+REGISTRY="crpi-57bx5zcp97h0pj85.cn-guangzhou.personal.cr.aliyuncs.com"
 NAMESPACE="cakeh"
 
 MODULE="${1:-all}"

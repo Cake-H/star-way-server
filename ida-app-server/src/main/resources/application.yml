@@ -86,31 +86,31 @@ ida:
     env-api-key-name: ARK_API_KEY_DEEPSEEK
     base-url: https://api.deepseek.com
     resume-parse:
-      model: deepseek-v4-flash
+      model: deepseek-flash
       temperature: 0.2
       max-plain-text-chars: 80000
       read-timeout-ms: 300000
       response-format-json-object: true
     plugin-autofill:
-      model: deepseek-v4-flash
+      model: deepseek-flash
       temperature: 0.15
       max-tokens: 16384
       read-timeout-ms: 300000
       response-format-json-object: true
     interview-summarize:
-      model: deepseek-v4-flash
+      model: deepseek-flash
       temperature: 0.3
       max-tokens: 8192
       read-timeout-ms: 120000
       response-format-json-object: true
     mock-interview:
-      model: deepseek-v4-flash
+      model: deepseek-flash
       temperature: 0.4
       max-tokens: 8192
       read-timeout-ms: 300000
       response-format-json-object: true
     job-application-parse:
-      model: deepseek-v4-flash
+      model: deepseek-flash
       temperature: 0.1
       max-tokens: 8192
       read-timeout-ms: 60000

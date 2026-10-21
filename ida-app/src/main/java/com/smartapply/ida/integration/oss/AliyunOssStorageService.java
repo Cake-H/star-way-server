@@ -2,10 +2,11 @@ package com.smartapply.ida.integration.oss;
 
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.model.ObjectMetadata;
+import com.smartapply.ida.config.oss.AliyunOssClientAvailableCondition;
 import com.smartapply.ida.config.props.oss.AliyunOssProperties;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,7 +25,7 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
-@ConditionalOnBean(OSS.class)
+@Conditional(AliyunOssClientAvailableCondition.class)
 public class AliyunOssStorageService {
 
     private final OSS oss;

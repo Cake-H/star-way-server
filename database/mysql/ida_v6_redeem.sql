@@ -34,6 +34,6 @@ COMMENT ='AI 额度兑换码';
 -- 示例：手动生成 10 张 100 点、30 天后过期的兑换码（测试期可直接执行）
 -- -----------------------------------------------------------------------------
 INSERT INTO `ida_redeem_code` (`code`, `points`, `expire_time`, `remark`, `created_by`)
-SELECT UUID_SHORT(), 100, DATE_ADD(NOW(3), INTERVAL 30 DAY), 'seed-batch-001', 'admin'
+SELECT UUID_SHORT(), 150, DATE_ADD(NOW(3), INTERVAL 30 DAY), 'seed-batch-001', 'admin'
 FROM DUAL
-UNION ALL SELECT UUID_SHORT(), 100, DATE_ADD(NOW(3), INTERVAL 30 DAY), 'seed-batch-001', 'admin';
+UNION ALL SELECT UUID_SHORT(), 150, DATE_ADD(NOW(3), INTERVAL 30 DAY), 'seed-batch-001', 'admin';
