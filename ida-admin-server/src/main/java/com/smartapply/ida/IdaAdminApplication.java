@@ -19,7 +19,9 @@ import org.springframework.core.env.Environment;
  *   <li>C 端/插件端全部 Controller：后台不对外暴露任何 C 端接口</li>
  *   <li>{@code module.app.auth/resume/interview/mockInterview/plugin/health}：C 端业务服务，后台用不到</li>
  *   <li>{@code module.plugin} 与 {@code ai} 包：插件业务与 LLM/语音能力，后台不调用</li>
- *   <li>{@code config.oss/sms} 与 {@code integration} 包：对象存储/短信集成，后台不依赖</li>
+ *   <li>{@code config.sms} 与 {@code integration} 包中的短信/简历解析集成，后台不依赖；
+ *       但放行 {@code config.oss} 与 {@code integration.oss}：用户反馈详情需经
+ *       {@code AliyunOssStorageService} 生成附件预签名 URL（其 {@code @Conditional} 按环境变量装配，未配置 OSS 时自动跳过）</li>
  *   <li>{@code http.filter}：C 端 Bearer/调试头过滤器；后台使用 {@code module.admin} 下自己的鉴权过滤器，
  *       防止 {@code X-User-Id} 调试头在后台伪造身份</li>
  * </ul>
@@ -37,8 +39,10 @@ import org.springframework.core.env.Environment;
                 @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.smartapply\\.ida\\.module\\.app\\.(auth|resume|interview|mockInterview|plugin|health)\\..*"),
                 @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.smartapply\\.ida\\.module\\.plugin\\..*"),
                 @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.smartapply\\.ida\\.ai\\..*"),
-                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.smartapply\\.ida\\.config\\.(oss|sms)\\..*"),
-                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.smartapply\\.ida\\.integration\\..*"),
+                // 放行 config.oss：用户反馈详情要生成附件预签名 URL，需 AliyunOssConfiguration + AliyunOssClientAvailableCondition
+                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.smartapply\\.ida\\.config\\.sms\\..*"),
+                // 只排除 integration 下的短信/简历解析，放行 integration.oss（AliyunOssStorageService，按条件装配）
+                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.smartapply\\.ida\\.integration\\.(resume|sms)\\..*"),
                 @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.smartapply\\.ida\\.http\\.filter\\..*")
         }
 )

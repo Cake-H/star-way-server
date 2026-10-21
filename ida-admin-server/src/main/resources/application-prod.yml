@@ -44,6 +44,17 @@ ida:
     access-host: ${IDA_ACCESS_HOST}
     api-v1-prefix: /api/v1/admin
 
+  # 用户反馈附件预签名 URL 需要 OSS（反馈本身在 APP 端上传，后台只读）
+  aliyun:
+    oss:
+      enabled: ${ALIYUN_OSS_ENABLED:true}
+      endpoint: ${ALIYUN_OSS_ENDPOINT:}
+      access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
+      access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+      bucket: ${ALIYUN_OSS_BUCKET:}
+      key-prefix: app/resume/
+      public-base-url: ${ALIYUN_OSS_PUBLIC_BASE_URL:}
+
 logging:
   level:
     root: info

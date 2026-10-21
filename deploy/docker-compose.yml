@@ -153,6 +153,12 @@ services:
       # --- AES 字段加密（与 app/plugin 同一套密钥，解密展示用户数据时需要） ---
       IDA_AES_FIELD_SECRET: ${IDA_AES_FIELD_SECRET}
       IDA_AES_FIELD_SALT_HEX: ${IDA_AES_FIELD_SALT_HEX}
+      # --- 阿里云 OSS（用户反馈附件预签名 URL，后台只读） ---
+      ALIYUN_OSS_ENDPOINT: ${ALIYUN_OSS_ENDPOINT}
+      ALIYUN_OSS_ACCESS_KEY_ID: ${ALIYUN_OSS_ACCESS_KEY_ID}
+      ALIYUN_OSS_ACCESS_KEY_SECRET: ${ALIYUN_OSS_ACCESS_KEY_SECRET}
+      ALIYUN_OSS_BUCKET: ${ALIYUN_OSS_BUCKET}
+      ALIYUN_OSS_PUBLIC_BASE_URL: ${ALIYUN_OSS_PUBLIC_BASE_URL}
     networks:
       - ida-network
     healthcheck:
