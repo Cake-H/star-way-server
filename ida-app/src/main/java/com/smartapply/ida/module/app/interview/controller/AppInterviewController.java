@@ -6,6 +6,7 @@ import com.smartapply.ida.common.domain.interview.vo.*;
 import com.smartapply.ida.constant.ApiRouteConstants;
 import com.smartapply.ida.http.annotation.RequestUserId;
 import com.smartapply.ida.module.app.interview.service.AppInterviewService;
+import com.smartapply.ida.module.app.interview.service.AppInterviewSummarizeTaskService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,6 +18,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -37,6 +39,7 @@ import java.util.List;
 public class AppInterviewController {
 
     private final AppInterviewService appInterviewService;
+    private final AppInterviewSummarizeTaskService appInterviewSummarizeTaskService;
 
     @Operation(summary = "复盘场次列表")
     @GetMapping("/sessions")
@@ -129,5 +132,36 @@ public class AppInterviewController {
         String raw = body != null ? body.getRawTranscript() : null;
         log.info("面试语音总结 json userId={} sessionId={} transcriptLen={}", userId, sessionId, raw != null ? raw.length() : 0);
         return ResponseDTO.ok(appInterviewService.voiceSummarize(userId, sessionId, null, raw));
+    }
+
+    @Operation(summary = "语音/文本 AI 总结（异步任务，multipart：file + rawTranscript，返回 taskId 轮询）")
+    @PostMapping(value = "/sessions/{sessionId}/voice-summarize/tasks", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseDTO<String> voiceSummarizeTaskMultipart(
+            @RequestUserId(required = true) Long userId,
+            @PathVariable("sessionId") Long sessionId,
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "rawTranscript", required = false) String rawTranscript) throws IOException {
+        log.info("面试语音总结异步任务 multipart userId={} sessionId={} hasFile={}", userId, sessionId, file != null && !file.isEmpty());
+        return ResponseDTO.ok(appInterviewSummarizeTaskService.submit(userId, sessionId, file, rawTranscript));
+    }
+
+    @Operation(summary = "语音/文本 AI 总结（异步任务，JSON：rawTranscript，返回 taskId 轮询）")
+    @PostMapping(value = "/sessions/{sessionId}/voice-summarize/tasks", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseDTO<String> voiceSummarizeTaskJson(
+            @RequestUserId(required = true) Long userId,
+            @PathVariable("sessionId") Long sessionId,
+            @RequestBody(required = false) InterviewVoiceSummarizeTextRequest body) throws IOException {
+        String raw = body != null ? body.getRawTranscript() : null;
+        log.info("面试语音总结异步任务 json userId={} sessionId={} transcriptLen={}", userId, sessionId, raw != null ? raw.length() : 0);
+        return ResponseDTO.ok(appInterviewSummarizeTaskService.submit(userId, sessionId, null, raw));
+    }
+
+    @Operation(summary = "轮询语音总结任务状态")
+    @GetMapping("/sessions/{sessionId}/voice-summarize/tasks/{taskId}")
+    public ResponseDTO<InterviewVoiceSummarizeTaskStatusVO> queryVoiceSummarizeTask(
+            @RequestUserId(required = true) Long userId,
+            @PathVariable("sessionId") Long sessionId,
+            @PathVariable("taskId") String taskId) {
+        return ResponseDTO.ok(appInterviewSummarizeTaskService.query(userId, sessionId, taskId));
     }
 }

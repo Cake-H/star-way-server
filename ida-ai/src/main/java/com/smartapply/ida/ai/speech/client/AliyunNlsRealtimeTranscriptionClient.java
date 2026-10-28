@@ -78,6 +78,12 @@ public class AliyunNlsRealtimeTranscriptionClient implements SpeechTranscription
             try (InputStream in = file.getInputStream()) {
                 int len;
                 while ((len = in.read(buffer)) > 0) {
+                    // onFail 发生在 SDK 的 Netty 线程，连接可能已被服务端关闭；
+                    // 每轮发送前先检查失败标记，带着真实原因快速失败，
+                    // 避免继续往死连接 send 而抛出掩盖根因的 "can't send, STATE_CLOSED"
+                    if (listener.failureMessage != null) {
+                        throw new IllegalStateException("阿里云实时听写失败: " + listener.failureMessage);
+                    }
                     transcriber.send(buffer, len);
                     // 模拟实时发送，避免 GET_CLIENT_DATA_TIMEOUT
                     int sleepMs = sleepDeltaMs(len, sampleRate);
